@@ -1,11 +1,3 @@
-// Copyright Vladimir Prus 2002-2004.
-// Distributed under the Boost Software License, Version 1.0.
-// (See accompanying file LICENSE_1_0.txt
-// or copy at http://www.boost.org/LICENSE_1_0.txt)
-
-/* The simplest usage of the library.
- */
-
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
@@ -18,7 +10,7 @@ using std::cerr;
 using std::string;
 using std::vector;
 
-int main(int ac, char* av[])
+int main(int argc, char* argv[])
 {
     po::options_description desc("Allowed options");
     desc.add_options()
@@ -28,7 +20,7 @@ int main(int ac, char* av[])
         (",t", po::value<vector<int>>()->multitoken(), "timeout");
 
     po::variables_map vm;
-    po::store(po::parse_command_line(ac, av, desc), vm);
+    po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
 
     if (vm.count("help")) {
