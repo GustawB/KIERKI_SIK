@@ -26,7 +26,6 @@ pair<string, string> reg_additional_options(const string& s)
 
 int main(int argc, char* argv[])
 {
-    int IP_type = -1;
     po::options_description desc("Allowed options");
     vector<string> custom{};
     desc.add_options()
@@ -39,7 +38,7 @@ int main(int argc, char* argv[])
         
 
     po::variables_map vm;
-    po:store(po::command_line_parser(argc, argv).options(desc).extra_parser(reg_additional_options).run(), vm);
+    po::store(po::command_line_parser(argc, argv).options(desc).extra_parser(reg_additional_options).run(), vm);
     po::notify(vm);
 
    

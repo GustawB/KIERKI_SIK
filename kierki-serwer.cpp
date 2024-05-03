@@ -5,6 +5,8 @@ namespace po = boost::program_options;
 #include <iterator>
 #include <string>
 
+#include "serwer.h"
+
 using std::cout;
 using std::cerr;
 using std::string;
@@ -23,39 +25,7 @@ int main(int argc, char* argv[])
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
 
-    if (vm.count("help")) {
-        cout << desc << "\n";
-        return 1;
-    }
-
-    if (vm.count("-f")) {
-        vector<string> values = vm["-f"].as<vector<string>>();
-        cout << "files:";
-        for (const auto& value : values) {
-            cout << " " << value;
-        }
-        cout << ".\n";
-    } else {
-        cerr << "File name was not set.\n";
-    }
-
-    if (vm.count("-p")) {
-        vector<int> values = vm["-p"].as<vector<int>>();
-        cout << "ports:";
-        for (const auto& value : values) {
-            cout << " " << value;
-        }
-        cout << ".\n";
-    }
-
-    if (vm.count("-t")) {
-        vector<int> values = vm["-t"].as<vector<int>>();
-        cout << "timeouts:";
-        for (const auto& value : values) {
-            cout << " " << value;
-        }
-        cout << ".\n";
-    }
+    serwer::Serwer s;
 
     return 0;
 }
