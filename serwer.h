@@ -60,7 +60,7 @@ namespace serwer
         // Bind the socket to a concrete address.
         struct sockaddr_in6 server_address;
         server_address.sin6_family = AF_INET6; // IPv6
-        server_address.sin6_addr = IN6ADDR_ANY_INIT; // Listening on all interfaces.
+        server_address.sin6_addr = in6addr_any; // Listening on all interfaces.
         server_address.sin6_port = htons(port);
 
         if (bind(socket_fd, (struct sockaddr *) &server_address, (socklen_t) sizeof server_address) < 0) {
