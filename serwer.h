@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <array>
+#include <cinttypes>
 
 namespace serwer 
 {
@@ -24,9 +25,8 @@ namespace serwer
         Serwer(int port, int timeout, const std::string& game_file_name);
         ~Serwer();
 
-    private:
         void handle_connections();
-
+    private:
         int port;
         int timeout;
         string game_file_name;
@@ -39,8 +39,6 @@ namespace serwer
         : port(port), timeout(timeout), game_file_name(game_file_name), socket_fds({-1, -1, -1, -1})
     {
         connection_manager_thread = thread(&Serwer::handle_connections, this);
-
-        
     }
 
     inline Serwer::~Serwer()
@@ -50,29 +48,34 @@ namespace serwer
 
     inline void Serwer::handle_connections()
     {
-        int socket_fd = socket(AF_INET6, SOCK_STREAM, 0);
-        if (socket_fd == -1)
+        // Create a socket.
+        int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (socket_fd < 0) 
         {
-            cout << "Error creating socket\n";
-            exit(1);
+            cout << "Failed to create socket\n";
+            exit(1);    
         }
 
         // Bind the socket to a concrete address.
-        struct sockaddr_in6 server_address;
-        server_address.sin6_family = AF_INET6; // IPv6
-        server_address.sin6_addr = in6addr_any; // Listening on all interfaces.
-        server_address.sin6_port = htons(port);
+        struct sockaddr_in server_address;
+        server_address.sin_family = AF_INET; // IPv4
+        server_address.sin_addr.s_addr = htonl(INADDR_ANY); // Listening on all interfaces.
+        server_address.sin_port = htons(port);
 
-        if (bind(socket_fd, (struct sockaddr *) &server_address, (socklen_t) sizeof server_address) < 0) {
-            cout << "Error binding socket\n";
+        if (bind(socket_fd, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
+        {
+            cout << "Failed to bind socket\n";
             exit(1);
         }
 
         // Switch the socket to listening.
-        if (listen(socket_fd, 10) < 0) {
-            cout << "Error listening on socket\n";
+        if (listen(socket_fd, 69) < 0)
+        {
+            cout << "Failed to listen\n";
             exit(1);
         }
+
+        cout << "Listening on port " << port << "\n";
 
         for (;;) 
         {
@@ -82,11 +85,11 @@ namespace serwer
                                 &client_address_len);
             if (client_fd < 0) 
             {
-                cout << "Error accepting connection\n";
+                cout << "Failed to accept connection\n";
                 exit(1);
             }
 
-            cout << "Connection accepted\n";
+            cout << "Accepted connection\n";
         }
     }
 } // namespace serwer

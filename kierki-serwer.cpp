@@ -69,7 +69,6 @@ int main(int argc, char* argv[])
     }
 
     serwer::Serwer s(port, timeout, game_file_name);
-
     return 0;
 }
 

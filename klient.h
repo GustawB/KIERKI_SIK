@@ -9,11 +9,13 @@
 #include <cstring>
 #include <string>
 #include <netdb.h>
+#include <cinttypes>
 
 namespace klient
 {
     using std::string;
     using std::cerr;
+    using std::cout;
 
     class Klient
     {
@@ -24,7 +26,6 @@ namespace klient
 
         void connect_to_serwer();
 
-    private:
         struct sockaddr_in get_server_address(char const *host, uint16_t port);
 
         string host_name;
@@ -43,20 +44,19 @@ namespace klient
     {
         struct addrinfo hints;
         memset(&hints, 0, sizeof(struct addrinfo));
-        hints.ai_family = AF_INET6; // IPv4
+        hints.ai_family = AF_INET; // IPv4
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_protocol = IPPROTO_TCP;
 
         struct addrinfo *address_result;
         int errcode = getaddrinfo(host, NULL, &hints, &address_result);
-        if (errcode != 0) 
+        if (errcode != 0)
         {
-            cerr << "Error getting address info: " << gai_strerror(errcode) << "\n";
-            exit(1);
+            cout << "getaddrinfo: " << gai_strerror(errcode) << "\n";
         }
 
         struct sockaddr_in send_address;
-        send_address.sin_family = AF_INET6;   // IPv4
+        send_address.sin_family = AF_INET;   // IPv4
         send_address.sin_addr.s_addr =       // IP address
                 ((struct sockaddr_in *) (address_result->ai_addr))->sin_addr.s_addr;
         send_address.sin_port = htons(port); // port from the command line
@@ -71,18 +71,22 @@ namespace klient
         struct sockaddr_in server_address = get_server_address(host_name.c_str(), port_number);
 
         // Create a socket.
-        int socket_fd = socket(AF_INET6, SOCK_DGRAM, 0);
-        if (socket_fd < 0) 
+        int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (socket_fd < 0)
         {
-            cerr << "Error creating socket\n";
+            cout << "Failed to create socket\n";
             exit(1);
         }
 
-        if (connect(socket_fd, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) 
+        // Connect to the server.
+        if (connect(socket_fd, (struct sockaddr *) &server_address,
+                    (socklen_t) sizeof(server_address)) < 0)
         {
-            cerr << "Error connecting to server\n";
+            cout << "Failed to connect to server\n";
             exit(1);
         }
+
+        cout << "Connected to server\n";
     }
 
 
