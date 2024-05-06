@@ -87,6 +87,16 @@ namespace klient
         }
 
         cout << "Connected to server\n";
+
+        // Send the seat name to the server.
+        if (send(socket_fd, seat.c_str(), seat.size(), 0) < 0)
+        {
+            cout << "Failed to send seat name\n";
+            exit(1);
+        }
+
+        close(socket_fd);
+        cout << "Connection closed\n";
     }
 
 

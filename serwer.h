@@ -6,16 +6,20 @@
 #include <vector>
 #include <mutex>
 #include <array>
+#include <map>
 #include <cinttypes>
 
 namespace serwer 
 {
+    #define QUEUE_SIZE 5
+
     using std::thread;
     using std::mutex;
     using std::array;
     using std::string;
     using std::vector;
     using std::cout;
+    using std::map;
     class Serwer
     {
     private:
@@ -26,18 +30,31 @@ namespace serwer
         ~Serwer();
 
         void handle_connections();
+        void handle_client(int client_fd);
     private:
         int port;
         int timeout;
         string game_file_name;
 
         thread connection_manager_thread;
-        array<int, 4> socket_fds;
+        
+        int total_threads;
+        mutex total_threads_mutex;
+
+        map<string, bool> seats_status;
+        map<string, mutex> seats_mutex;
     };
 
     inline Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-        : port(port), timeout(timeout), game_file_name(game_file_name), socket_fds({-1, -1, -1, -1})
+        : port(port), timeout(timeout), game_file_name(game_file_name), total_threads(0), total_threads_mutex(),
+            seats_status({{"N", false}, {"E", false}, {"S", false}, {"W", false}})
     {
+
+        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("N"), std::make_tuple());
+        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("E"), std::make_tuple());
+        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("S"), std::make_tuple());
+        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("W"), std::make_tuple());
+        
         connection_manager_thread = thread(&Serwer::handle_connections, this);
     }
 
@@ -69,7 +86,7 @@ namespace serwer
         }
 
         // Switch the socket to listening.
-        if (listen(socket_fd, 69) < 0)
+        if (listen(socket_fd, QUEUE_SIZE) < 0)
         {
             cout << "Failed to listen\n";
             exit(1);
@@ -90,6 +107,48 @@ namespace serwer
             }
 
             cout << "Accepted connection\n";
+
+            // Create a new thread to handle the client and detach it.
+            thread client_thread(&Serwer::handle_client, this, client_fd);
+            client_thread.detach();
         }
+    }
+
+    inline void Serwer::handle_client(int client_fd)
+    {
+        total_threads_mutex.lock();
+        total_threads++;
+        total_threads_mutex.unlock();
+
+        // Read the message from the client.
+        array<char, 1024> buffer;
+        int bytes_read = read(client_fd, buffer.data(), buffer.size());
+        if (bytes_read < 0) 
+        {
+            cout << "Failed to read from client\n";
+            exit(1);
+        }
+
+        string message(buffer.data(), bytes_read);
+        cout << "Received message: " << message << "\n";
+
+        seats_mutex[message].lock();
+        if (seats_status[message] == true)
+        {
+            cout << "Seat " << message << " is already taken\n";
+        }
+        else
+        {
+            cout << "Seat " << message << " is free\n";
+            seats_status[message] = true;
+        }
+        seats_mutex[message].unlock();
+
+        // Close the connection.
+        close(client_fd);
+
+        total_threads_mutex.lock();
+        total_threads--;
+        total_threads_mutex.unlock();
     }
 } // namespace serwer
