@@ -39,7 +39,9 @@ namespace serwer
         thread connection_manager_thread;
         
         int total_threads;
+        bool b_is_waiting;
         mutex total_threads_mutex;
+        mutex remaining_threads_mutex;
 
         map<string, bool> seats_status;
         map<string, mutex> seats_mutex;
@@ -49,7 +51,7 @@ namespace serwer
         : port(port), timeout(timeout), game_file_name(game_file_name), total_threads(0), total_threads_mutex(),
             seats_status({{"N", false}, {"E", false}, {"S", false}, {"W", false}})
     {
-
+        // std::mutex has literally no initialization functionality, hence this crazy ass magic.
         seats_mutex.emplace(std::piecewise_construct, std::make_tuple("N"), std::make_tuple());
         seats_mutex.emplace(std::piecewise_construct, std::make_tuple("E"), std::make_tuple());
         seats_mutex.emplace(std::piecewise_construct, std::make_tuple("S"), std::make_tuple());
@@ -61,6 +63,18 @@ namespace serwer
     inline Serwer::~Serwer()
     {
         connection_manager_thread.join();
+        // Wait for every remaining thread to finish.
+        total_threads_mutex.lock();
+        if (total_threads > 0)
+        {
+            b_is_waiting = true;
+            total_threads_mutex.unlock();
+            remaining_threads_mutex.lock();
+        }
+        else 
+        {
+            total_threads_mutex.unlock();
+        }
     }
 
     inline void Serwer::handle_connections()
@@ -149,6 +163,11 @@ namespace serwer
 
         total_threads_mutex.lock();
         total_threads--;
+        if (total_threads == 0 && b_is_waiting)
+        {
+            // Notify the destructor that all threads have finished.
+            remaining_threads_mutex.unlock();
+        }
         total_threads_mutex.unlock();
     }
 } // namespace serwer
