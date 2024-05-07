@@ -10,5 +10,5 @@ namespace common
     using std::cout;
 
     void read_from_socket(int socket_fd, string& buffer);
-    void write_to_socket(int socket_fd, char* buffer);
+    void write_to_socket(int socket_fd, char* buffer, size_t buffer_length);
 } // namespace common
