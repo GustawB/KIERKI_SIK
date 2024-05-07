@@ -22,10 +22,13 @@ common.o: common.cpp common.h
 regex.o: regex.cpp regex.h
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) -c $< -o $@
 
-$(TARGET1).o: $(TARGET1).cpp common.h regex.h serwer.h
+cmd_args_parsers.o: cmd_args_parsers.cpp cmd_args_parsers.h
+	$(CC) $(CFLAGS) -I$(BOOST_ROOT) -c $< -o $@
+
+$(TARGET1).o: $(TARGET1).cpp common.h regex.h serwer.h cmd_args_parsers.h
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) $(LFLAGS) -c $< -o $@
 
-$(TARGET2).o: $(TARGET2).cpp common.h regex.h klient.h
+$(TARGET2).o: $(TARGET2).cpp common.h regex.h klient.h cmd_args_parsers.h
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) $(LFLAGS) -c $< -o $@
 
 clean:
