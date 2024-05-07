@@ -43,6 +43,9 @@ namespace serwer
         mutex total_threads_mutex;
         mutex remaining_threads_mutex;
 
+        int nr_of_main_threads;
+        mutex nr_of_main_threads_mutex;
+
         map<string, bool> seats_status;
         map<string, mutex> seats_mutex;
     };
