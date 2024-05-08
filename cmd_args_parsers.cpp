@@ -1,5 +1,8 @@
 #include "cmd_args_parsers.h"
 
+using std::string;
+using std::pair;
+
 void parser::parse_server_args(int argc, char* argv[], int& port, string& game_file_name, int& timeout)
 {
     try 
@@ -43,7 +46,7 @@ void parser::parse_server_args(int argc, char* argv[], int& port, string& game_f
     catch(exception& e) 
     {
         cerr << "error: " << e.what() << "\n";
-        return 1;
+        exit(1);
     }
     catch(...) 
     {
@@ -63,7 +66,7 @@ pair<string, string> reg_additional_options(const string& s)
     else { return make_pair(string(), string()); }
 }
 
-void parser::parse_client_args(int argc, char* argv[], string& host, int& port_number, int& IP_v string& seat, bool& is_AI)
+void parser::parse_client_args(int argc, char* argv[], string& host, int& port_number, int& IP_v, string& seat, bool& is_AI)
 {
     try
     {
@@ -126,7 +129,7 @@ void parser::parse_client_args(int argc, char* argv[], string& host, int& port_n
     catch(exception& e) 
     {
         cerr << "error: " << e.what() << "\n";
-        return 1;
+        exit(1);
     }
     catch(...) 
     {

@@ -10,10 +10,10 @@ TARGET2 = kierki-klient
 
 all: $(TARGET1) $(TARGET2)
 
-$(TARGET1): $(TARGET1).o common.o regex.o
+$(TARGET1): $(TARGET1).o common.o regex.o cmd_args_parsers.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LFLAGS)
 
-$(TARGET2): $(TARGET2).o common.o regex.o
+$(TARGET2): $(TARGET2).o common.o regex.o cmd_args_parsers.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LFLAGS)
 
 common.o: common.cpp common.h

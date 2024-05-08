@@ -1,4 +1,8 @@
 #include <boost/program_options.hpp>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <exception>
 
 namespace parser
 {
@@ -6,6 +10,9 @@ namespace parser
     using std::vector;
     using std::exception;
     using std::invalid_argument;
+    using std::cout;
+    using std::cerr;
+    
 
     namespace po = boost::program_options;
 
