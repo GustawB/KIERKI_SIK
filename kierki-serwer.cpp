@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
     string game_file_name;
     int timeout = 5;
     
-    //parser::parse_server_args(argc, argv, port, game_file_name, timeout);
+    parser::parse_server_args(argc, argv, port, game_file_name, timeout);
 
     serwer::Serwer s(port, timeout, game_file_name);
     return 0;

@@ -24,6 +24,8 @@ int main(int argc, char* argv[])
     bool AI = false;
     
     //parser::parse_client_args(argc, argv, host_name, port, ip_version, seat, AI);
+
+    // Why tf this isn't compiling?
     parser::parse_client_args(argc, argv, host_name, port, ip_version, seat, AI);
 
     klient::Klient klient(host_name, port, ip_version, seat, AI);

@@ -8,6 +8,10 @@
 #include <array>
 #include <map>
 #include <cinttypes>
+#include <poll.h>
+
+#include "common.h"
+#include "regex.h"
 
 namespace serwer 
 {
@@ -20,6 +24,9 @@ namespace serwer
     using std::vector;
     using std::cout;
     using std::map;
+
+    using poll_size = vector<struct pollfd>::size_type;
+
     class Serwer
     {
     private:
@@ -30,54 +37,31 @@ namespace serwer
         ~Serwer();
 
         void handle_connections();
-        void handle_client(int client_fd);
+        void handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd);
     private:
         int port;
         int timeout;
         string game_file_name;
 
         thread connection_manager_thread;
-        
-        int total_threads;
-        bool b_is_waiting;
-        mutex total_threads_mutex;
-        mutex remaining_threads_mutex;
 
         int nr_of_main_threads;
         mutex nr_of_main_threads_mutex;
 
-        map<string, bool> seats_status;
-        map<string, mutex> seats_mutex;
+        map<string, int> seats_status;
+        mutex seats_mutex;
     };
 
     inline Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-        : port(port), timeout(timeout), game_file_name(game_file_name), total_threads(0), total_threads_mutex(),
-            seats_status({{"N", false}, {"E", false}, {"S", false}, {"W", false}})
-    {
-        // std::mutex has literally no initialization functionality, hence this crazy ass magic.
-        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("N"), std::make_tuple());
-        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("E"), std::make_tuple());
-        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("S"), std::make_tuple());
-        seats_mutex.emplace(std::piecewise_construct, std::make_tuple("W"), std::make_tuple());
-        
+        : port(port), timeout(timeout), game_file_name(game_file_name), 
+        seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex()
+    {   
         connection_manager_thread = thread(&Serwer::handle_connections, this);
     }
 
     inline Serwer::~Serwer()
     {
         connection_manager_thread.join();
-        // Wait for every remaining thread to finish.
-        total_threads_mutex.lock();
-        if (total_threads > 0)
-        {
-            b_is_waiting = true;
-            total_threads_mutex.unlock();
-            remaining_threads_mutex.lock();
-        }
-        else 
-        {
-            total_threads_mutex.unlock();
-        }
     }
 
     inline void Serwer::handle_connections()
@@ -111,66 +95,143 @@ namespace serwer
 
         cout << "Listening on port " << port << "\n";
 
+        // Four for seats, one for sevrer, one for new connection.
+        vector<struct pollfd> poll_descriptors(6);
+        poll_descriptors[0].fd = socket_fd;
+        poll_descriptors[0].events = POLLIN;
+        // Initialize the rest of the fds.
+
+        for (poll_size i = 1; i < 6; i++)
+        {
+            poll_descriptors[i].fd = -1;
+            poll_descriptors[i].events = POLLIN;
+        }
+
         for (;;) 
         {
-            struct sockaddr_in client_address;
-            socklen_t client_address_len = sizeof(client_address);
-            int client_fd = accept(socket_fd, (struct sockaddr *) &client_address,
-                                &client_address_len);
-            if (client_fd < 0) 
+            // Reset the revents.
+            for (poll_size i = 0; i < poll_descriptors.size(); ++i)
             {
-                cout << "Failed to accept connection\n";
-                exit(1);
+                poll_descriptors[i].revents = 0;
             }
 
-            cout << "Accepted connection\n";
+            int poll_result = poll(&poll_descriptors[0], poll_descriptors.size(), -1);
+            if (poll_result < 0)
+            {
+                cout << "Failed to poll\n";
+                exit(1);
+            }
+            else if (poll_result == 0)
+            {
+                cout << "De fuq?\n";
+                continue;
+            }
+            else
+            {
+                // Handle the new connection.
+                if (poll_descriptors[0].revents & POLLIN)
+                {
+                    struct sockaddr_in client_address;
+                    socklen_t client_address_len = sizeof(client_address);
+                    int client_fd = accept(socket_fd, (struct sockaddr *) &client_address,
+                                        &client_address_len);
+                    if (client_fd < 0) 
+                    {
+                        cout << "Failed to accept connection\n";
+                        exit(1);
+                    }
 
-            // Create a new thread to handle the client and detach it.
-            thread client_thread(&Serwer::handle_client, this, client_fd);
-            client_thread.detach();
+                    poll_descriptors.push_back({client_fd, POLLIN, 0});
+                    cout << "Accepted connection\n";
+                }
+
+                // Handle new clients that are eligible for the place at the table.
+                for (poll_size i = 6; i < poll_descriptors.size(); ++i)
+                {
+                    if (poll_descriptors[i].revents & POLLIN)
+                    {
+                        // Client managed to reserve a spot at the table. Move him to the top four fds.
+                        string msg{"0"};
+                        ssize_t bytes_read = read(poll_descriptors[i].fd, msg.data(), 1);
+                        if (bytes_read < 0)
+                        {
+                            cout << "Failed to read from client\n";
+                            exit(1);
+                        }
+                        for (int j = 1; j < 5; ++j)
+                        {
+                            if (poll_descriptors[j].fd == -1)
+                            {
+                                poll_descriptors[j] = poll_descriptors[i];
+                                auto iter = poll_descriptors.begin() + i;
+                                poll_descriptors.erase(iter);
+                                --i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    inline void Serwer::handle_client(int client_fd)
+    inline void Serwer::handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd)
     {
-        total_threads_mutex.lock();
-        total_threads++;
-        total_threads_mutex.unlock();
-
         // Read the message from the client.
-        array<char, 1024> buffer;
-        int bytes_read = read(client_fd, buffer.data(), buffer.size());
-        if (bytes_read < 0) 
+        string message;
+        common::read_from_socket(client_fd, message);
+        if (regex::IAM_check(message))
         {
-            cout << "Failed to read from client\n";
-            exit(1);
-        }
+            string seat = message.substr(3, 1);
+            seats_mutex.lock();
+            if (seats_status[message] == -1) 
+            {
+                cout << "Seat " << message << " is free\n";
+                seats_status[message] = client_fd;
+                seats_mutex.unlock();
+            }
+            else
+            {
+                cout << "Seat " << message << " is already taken\n";
+                string busy_message = "BUSY";
+                for (auto& [seat, fd] : seats_status)
+                {
+                    if (fd != -1) { busy_message += seat; }
+                }
+                seats_mutex.unlock();
+                busy_message += "\r\n";
+                common::write_to_socket(client_fd, busy_message.data(), busy_message.size());
+                string server_message = "c";
+                common::write_to_socket(client_fd, server_message.data(), 1);
+                return;
+            }
 
-        string message(buffer.data(), bytes_read);
-        cout << "Received message: " << message << "\n";
+            // Read messages from the client.
+            for(;;)
+            {
+                // Setup the poll for the client and the pipe.
+                struct pollfd poll_descriptors[2];
+                poll_descriptors[0].fd = client_fd;
+                poll_descriptors[0].events = POLLIN;
+                poll_descriptors[1].fd = pipe_read_fd;
+                poll_descriptors[1].events = POLLIN;
 
-        seats_mutex[message].lock();
-        if (seats_status[message] == true)
-        {
-            cout << "Seat " << message << " is already taken\n";
+                int poll_result = poll(&poll_descriptors[0], 2, -1);
+                if (poll_result < 0)
+                {
+                    cout << "Failed to poll\n";
+                    exit(1);
+                }
+                else if (poll_result == 0)
+                {
+                    cout << "De fuq?\n";
+                    continue;
+                }
+                else
+                {
+                    cout << "TO BE CONTINUED\n";
+                }
+            }
         }
-        else
-        {
-            cout << "Seat " << message << " is free\n";
-            seats_status[message] = true;
-        }
-        seats_mutex[message].unlock();
-
-        // Close the connection.
-        close(client_fd);
-
-        total_threads_mutex.lock();
-        total_threads--;
-        if (total_threads == 0 && b_is_waiting)
-        {
-            // Notify the destructor that all threads have finished.
-            remaining_threads_mutex.unlock();
-        }
-        total_threads_mutex.unlock();
     }
 } // namespace serwer

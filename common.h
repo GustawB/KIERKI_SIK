@@ -2,6 +2,8 @@
 #include <iostream>
 #include <unistd.h>
 
+#define MAX_MESSAGE_SIZE 
+
 namespace common 
 {
     #define DELIMETER "\r\n"
