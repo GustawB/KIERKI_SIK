@@ -1,3 +1,6 @@
+#ifndef SERWER_H
+#define SERWER_H
+
 #include <iostream>
 #include <thread>
 #include <sys/types.h>
@@ -309,3 +312,5 @@ namespace serwer
         }
     }
 } // namespace serwer
+
+#endif // SERWER_H

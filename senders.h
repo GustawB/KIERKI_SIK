@@ -1,3 +1,6 @@
+#ifndef SENDERS_H
+#define SENDERS_H
+
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -20,3 +23,5 @@ namespace senders
     ssize_t send_score(int socket_fd, const map<string, int32_t>& scores);
     ssize_t send_total(int socket_fd, const map<string, int32_t>& scores);   
 } // namespace senders
+
+#endif // SENDERS_H

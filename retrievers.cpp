@@ -40,7 +40,7 @@ retrievers::taken_result retrievers::retrieve_taken(const string& message)
     taken_result result;
     string trick = regex::extract_trick_nr(message);
     result.trick_type = stoi(trick);
-    result.cards = regex::extract_cards(message.substr(5 + trick.length(), message.length() - 3 - 5 - trick.length());
+    result.cards = regex::extract_cards(message.substr(5 + trick.length(), message.length() - 3 - 5 - trick.length()));
     result.taking_seat = message.substr(message.length() - 3, 1);
     return result;
 }

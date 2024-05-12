@@ -11,18 +11,21 @@ ssize_t common::read_from_socket(int socket_fd, string& buffer)
         char c;
         ssize_t bytes_read = read(socket_fd, &c, 1);
 
-        if (bytes_read = 0) {return bytes_read;}
+        if (bytes_read == 0) {return bytes_read;}
         else 
         { // Managed to read without problems.
             buffer += c;
             if (buffer.length() >= 2 && buffer.ends_with(DELIMETER)) {return 1;}
         }
     }
+
+    return bytes_read;
 }
 
 ssize_t common::write_to_socket(int socket_fd, char* buffer, size_t buffer_length)
 {
     char* iter_ptr = buffer;
+    ssize_t store_buff_len = buffer_length;
     while (buffer_length > 0) 
     {
         ssize_t bytes_written = write(socket_fd, iter_ptr, buffer_length);
@@ -33,4 +36,6 @@ ssize_t common::write_to_socket(int socket_fd, char* buffer, size_t buffer_lengt
             buffer_length -= bytes_written;
         }
     }
+
+    return store_buff_len - buffer_length;
 }

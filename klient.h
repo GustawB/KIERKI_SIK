@@ -1,3 +1,6 @@
+#ifndef KLIENT_H
+#define KLIENT_H
+
 #include <iostream>
 #include <thread>
 #include <sys/types.h>
@@ -104,3 +107,5 @@ namespace klient
 
 
 } // namespace klient
+
+#endif // KLIENT_H

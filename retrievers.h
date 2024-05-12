@@ -1,3 +1,6 @@
+#ifndef RETRIEVERS_H
+#define RETRIEVERS_H
+
 #include <string>
 #include <vector>
 #include <map>
@@ -55,3 +58,5 @@ namespace retrievers
     map<string, int32_t> retrieve_score(const string& message);
     map<string, int32_t> retrieve_total(const string& message);
 } // namespace retrievers
+
+#endif // RETRIEVERS_H
