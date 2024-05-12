@@ -42,20 +42,18 @@ ssize_t senders::send_taken(int socket_fd, int8_t trick_type, const vector<strin
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
 
-ssize_t senders::send_score(int socket_fd, const array<int, 4>& scores)
+ssize_t senders::send_score(int socket_fd, const map<string, int32_t>& scores)
 {
-    array<string, 4> seats{"N", "E", "S", "W"};
     string message = "SCORE";
-    for (int i = 0; i < 4; i++) { message += seats[i] + std::to_string(scores[i]); }
+    for (const auto& score : scores) { message += score.first + std::to_string(score.second); } 
     message += DELIMETER;
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
 
-ssize_t senders::send_total(int socket_fd, const array<int, 4>& scores)
+ssize_t senders::send_total(int socket_fd, const map<string, int32_t>& scores)
 {
-    array<string, 4> seats{"N", "E", "S", "W"};
     string message = "TOTAL";
-    for (int i = 0; i < 4; i++) { message += seats[i] + std::to_string(scores[i]); }
+    for (const auto& score : scores) { message += score.first + std::to_string(score.second); }
     message += DELIMETER;
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
