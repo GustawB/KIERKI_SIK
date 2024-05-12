@@ -15,10 +15,12 @@
 
 #include "common.h"
 #include "regex.h"
+#include "senders.h"
+#include "retrievers.h"
 
 namespace serwer 
 {
-    #define QUEUE_SIZE 5
+    #define QUEUE_SIZE 69
 
     using std::thread;
     using std::mutex;
@@ -38,6 +40,7 @@ namespace serwer
         ~Serwer();
 
         void start_game();
+        void run_game();
 
     private:
         void handle_connections();
@@ -118,6 +121,58 @@ namespace serwer
                     cout << "Server woken up by " << i << " thread\n";
                 }
             }
+        }
+    }
+
+    inline void Serwer::run_game()
+    {
+        // Here we should have all 4 clients.
+        cout << "Running the game\n";
+        struct pollfd poll_descriptors[5];
+        for (int i = 0; i < 5; ++i)
+        {
+            poll_descriptors[i].fd = server_read_pipes[i][0];
+            poll_descriptors[i].events = POLLIN;
+        }
+
+        // First operation after being waken up should run normally.
+        bool b_there_are_four_players = true;
+        for (;;) 
+        {
+            
+
+
+            while (!b_there_are_four_players)
+            {
+                seats_mutex.lock();
+                b_there_are_four_players = (occupied == 4);
+                seats_mutex.unlock();
+                if(!b_there_are_four_players)
+                {
+                    int poll_result = poll(poll_descriptors, 5, -1);
+                    if (poll_result < 0)
+                    {
+                        cout << "Failed to poll\n";
+                        exit(1);
+                    }
+                    else if (poll_result == 0)
+                    {
+                        cout << "De fuq?\n";
+                    }
+                    else
+                    {
+                        for (int i = 0; i < 5; ++i)
+                        {
+                            if (poll_descriptors[i].revents & POLLIN)
+                            {
+                                cout << "Server woken up by " << i << " thread\n";
+                            }
+                        }
+                    }
+                }
+            }
+
+            
         }
     }
 

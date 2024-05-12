@@ -30,7 +30,7 @@ retrievers::trick_result retrievers::retrieve_trick(const string& message)
     return result;
 }
 
-int8_t retrievers::retrieve_wrong(const string& message)
+int16_t retrievers::retrieve_wrong(const string& message)
 {
     return message[5] - '0';
 }
