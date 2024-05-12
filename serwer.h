@@ -29,27 +29,27 @@ namespace serwer
 
     class Serwer
     {
-    private:
-        thread connection_thread;
     public:
         Serwer() = delete;
         Serwer(int port, int timeout, const std::string& game_file_name);
         ~Serwer();
 
+        void start_game();
+
+    private:
         void handle_connections();
         void handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd);
-        void start_game();
-    private:
+
         int port;
         int timeout;
         string game_file_name;
 
         thread connection_manager_thread;
 
-        int nr_of_main_threads;
-        mutex nr_of_main_threads_mutex;
+        vector<thread> client_threads;
+        mutex client_threads_mutex;
 
-        int occupied = 0;
+        int occupied;
         map<string, int> seats_status;
         mutex seats_mutex;
 
@@ -62,6 +62,7 @@ namespace serwer
 
     inline Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
         : port(port), timeout(timeout), game_file_name(game_file_name), 
+        client_threads(), client_threads_mutex(), occupied(0),
         seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex(),
         array_mapping({{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}) {}
 
