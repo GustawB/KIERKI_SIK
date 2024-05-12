@@ -38,6 +38,7 @@ namespace serwer
 
         void handle_connections();
         void handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd);
+        void start_game();
     private:
         int port;
         int timeout;
@@ -48,20 +49,72 @@ namespace serwer
         int nr_of_main_threads;
         mutex nr_of_main_threads_mutex;
 
+        int occupied = 0;
         map<string, int> seats_status;
         mutex seats_mutex;
+
+        // 0 - read; 1 - write
+        array<int[2], 5> server_read_pipes;
+        array<int[2], 5> server_write_pipes;
+
+        map<string, int> array_mapping;
     };
 
     inline Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
         : port(port), timeout(timeout), game_file_name(game_file_name), 
-        seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex()
-    {   
-        connection_manager_thread = thread(&Serwer::handle_connections, this);
-    }
+        seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex(),
+        array_mapping({{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}) {}
 
     inline Serwer::~Serwer()
     {
         connection_manager_thread.join();
+    }
+
+    inline void Serwer::start_game()
+    {
+        cout << "Starting the game\n";
+        for (int i = 0; i < 5; ++i)
+        {
+            if (pipe(server_read_pipes[i]) < 0 || pipe(server_write_pipes[i]) < 0)
+            {
+                cout << "Failed to create pipes\n";
+                exit(1);
+            }
+        }
+
+        cout << "Pipes created\n";
+
+        struct pollfd poll_descriptors[5];
+        for (int i = 0; i < 5; ++i)
+        {
+            poll_descriptors[i].fd = server_read_pipes[i][0];
+            poll_descriptors[i].events = POLLIN;
+        }
+
+        cout << "Poll descriptors created\n";
+
+        connection_manager_thread = thread(&Serwer::handle_connections, this);
+        
+        int poll_result = poll(poll_descriptors, 5, -1);
+        if (poll_result < 0)
+        {
+            cout << "Failed to poll\n";
+            exit(1);
+        }
+        else if (poll_result == 0)
+        {
+            cout << "De fuq?\n";
+        }
+        else
+        {
+            for (int i = 0; i < 5; ++i)
+            {
+                if (poll_descriptors[i].revents & POLLIN)
+                {
+                    cout << "Server woken up by " << i << " thread\n";
+                }
+            }
+        }
     }
 
     inline void Serwer::handle_connections()
@@ -95,8 +148,9 @@ namespace serwer
 
         cout << "Listening on port " << port << "\n";
 
-        // Four for seats, one for sevrer, one for new connection.
+        // Four for seats, one for server, one for new connection.
         vector<struct pollfd> poll_descriptors(6);
+        vector<int> pipe_fds(6, -1);
         poll_descriptors[0].fd = socket_fd;
         poll_descriptors[0].events = POLLIN;
         // Initialize the rest of the fds.
@@ -141,8 +195,18 @@ namespace serwer
                         exit(1);
                     }
 
-                    poll_descriptors.push_back({client_fd, POLLIN, 0});
+                    int pipe_write_fd[2], pipe_read_fd[2];
+                    if (pipe(pipe_write_fd) < 0 || pipe(pipe_read_fd) < 0)
+                    {
+                        cout << "Failed to create pipes\n";
+                        exit(1);
+                    }
+
+                    poll_descriptors.push_back({pipe_read_fd[0], POLLIN, 0});
+                    pipe_fds.push_back(pipe_write_fd[1]);
                     cout << "Accepted connection\n";
+                    thread client_thread(&Serwer::handle_client, this, client_fd, pipe_read_fd[1], pipe_write_fd[0]);
+                    client_thread.detach();
                 }
 
                 // Handle new clients that are eligible for the place at the table.
@@ -178,17 +242,26 @@ namespace serwer
     inline void Serwer::handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd)
     {
         // Read the message from the client.
+        cout << "Handling client " << client_fd << "\n";
         string message;
         common::read_from_socket(client_fd, message);
         if (regex::IAM_check(message))
         {
             string seat = message.substr(3, 1);
+            int local_occ = -1;
             seats_mutex.lock();
-            if (seats_status[message] == -1) 
+            if (seats_status[seat] == -1) 
             {
-                cout << "Seat " << message << " is free\n";
-                seats_status[message] = client_fd;
+                cout << "Seat " << seat << " is free\n";
+                seats_status[seat] = client_fd;
+                ++occupied;
+                local_occ = occupied;
                 seats_mutex.unlock();
+                if (local_occ == 4)
+                {
+                    string server_message = "c";
+                    common::write_to_socket(server_read_pipes[array_mapping[seat]][1], server_message.data(), 1);
+                }
             }
             else
             {
@@ -202,12 +275,12 @@ namespace serwer
                 busy_message += "\r\n";
                 common::write_to_socket(client_fd, busy_message.data(), busy_message.size());
                 string server_message = "c";
-                common::write_to_socket(client_fd, server_message.data(), 1);
+                common::write_to_socket(pipe_write_fd, server_message.data(), 1);
                 return;
             }
 
             // Read messages from the client.
-            for(;;)
+            /*for(;;)
             {
                 // Setup the poll for the client and the pipe.
                 struct pollfd poll_descriptors[2];
@@ -231,7 +304,7 @@ namespace serwer
                 {
                     cout << "TO BE CONTINUED\n";
                 }
-            }
+            }*/
         }
     }
 } // namespace serwer

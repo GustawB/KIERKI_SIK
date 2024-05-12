@@ -11,6 +11,9 @@
 #include <netdb.h>
 #include <cinttypes>
 
+#include "common.h"
+#include "regex.h"
+
 namespace klient
 {
     using std::string;
@@ -88,12 +91,12 @@ namespace klient
 
         cout << "Connected to server\n";
 
+        string message = "IAM" + seat + "\r\n";
+
         // Send the seat name to the server.
-        if (send(socket_fd, seat.c_str(), seat.size(), 0) < 0)
-        {
-            cout << "Failed to send seat name\n";
-            exit(1);
-        }
+        common::write_to_socket(socket_fd, message.data(), message.size());
+
+        //sleep(100);
 
         close(socket_fd);
         cout << "Connection closed\n";

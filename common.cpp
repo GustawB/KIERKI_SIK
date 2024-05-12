@@ -6,7 +6,8 @@ void common::read_from_socket(int socket_fd, string& buffer)
     // Read from socket char-by-char.
     while (bytes_read > 0)
     {
-        ssize_t bytes_read = read(socket_fd, buffer.data(), 1);
+        char c;
+        ssize_t bytes_read = read(socket_fd, &c, 1);
         if (bytes_read < 0) 
         {
             cout << "Failed to read from client\n";
@@ -19,7 +20,8 @@ void common::read_from_socket(int socket_fd, string& buffer)
         }
         else 
         { // Managed to read without problems.
-            if (buffer.ends_with(DELIMETER))
+            buffer += c;
+            if (buffer.length() >= 2 && buffer.ends_with(DELIMETER))
             {
                 break;
             }
