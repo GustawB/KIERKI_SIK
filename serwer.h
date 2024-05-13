@@ -64,12 +64,20 @@ namespace serwer
         array<int[2], 5> server_write_pipes;
 
         map<string, int> array_mapping;
+
+        string current_message;
+        mutex current_message_mutex;
+
+        vector<string> cards_on_table;
+
+        map<string, int16_t> round_scores;
+        map<string, int16_t> total_scores;
     };
 
     inline Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
         : port(port), timeout(timeout), game_file_name(game_file_name), 
-        client_threads(), client_threads_mutex(), occupied(0),
-        seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex(),
+        client_threads(), client_threads_mutex(), occupied(0), current_message(""), current_message_mutex(), cards_on_table(""),
+        seats_status({{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}}), seats_mutex(), round_scores(), total_scores(),
         array_mapping({{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}) {}
 
     inline Serwer::~Serwer()
@@ -135,12 +143,40 @@ namespace serwer
             poll_descriptors[i].events = POLLIN;
         }
 
+        file_reader::FileReader fr(game_file_name);
+
         // First operation after being waken up should run normally.
         bool b_there_are_four_players = true;
-        for (;;) 
+        while (fr.read_next_deal() > 0) 
         {
             
-
+            int16_t trick = fr.get_trick_type();
+            strign seat = fr.get_seat();
+            array<string, 4> cards = fr.get_cards();
+            array<string, 4> seats = {"N", "E", "S", "W"};
+            int beginning = array_mapping[seat];
+            for (int i = 0; i < 4; ++i)
+            {
+                string message = "s";
+                common::write_to_socket(server_write_pipes[(beginning + i) % 4][1], message.data(), 1);
+                string client_message;
+                common::read_from_socket(server_read_pipes[(beginning + i) % 4][0], client_message);
+                if (client_message == "c")
+                {
+                    cout << "Client " << seats[(beginning + i) % 4] << " ran away\n";
+                    // client run away, we should stop the game.
+                }
+                else if (regex::TRICK_client_check(client_message))
+                {
+                    cout << "Client " << seats[(beginning + i) % 4] << " played a card\n";
+                    // client played a card
+                }
+                else
+                {
+                    cout << "Client " << seats[(beginning + i) % 4] << " failed to play a card\n";
+                    // pipe failed ffs.
+                }
+            }
 
             while (!b_there_are_four_players)
             {
@@ -303,7 +339,22 @@ namespace serwer
         // Read the message from the client.
         cout << "Handling client " << client_fd << "\n";
         string message;
-        common::read_from_socket(client_fd, message);
+        ssize_t pipe_read = -1;
+        ssize_t socket_read = common::read_from_socket(client_fd, message);
+        ssize_t pipe_write = -1;
+        ssize_t socket_write = -1;
+        int16_t current_trick = 1;
+        if (socket_read == 0) 
+        {
+            // Client disconnected. Here we don't have to worry about anything, end execution.
+            close(client_fd);
+            return; 
+        }
+        else if (socket_read < 0)
+        {
+            close(client_fd);
+            common::print_error("Failed to read IAM message.");
+        }
         if (regex::IAM_check(message))
         {
             string seat = message.substr(3, 1);
@@ -319,52 +370,221 @@ namespace serwer
                 if (local_occ == 4)
                 {
                     string server_message = "c";
-                    common::write_to_socket(server_read_pipes[array_mapping[seat]][1], server_message.data(), 1);
+                    // Notify the server that all seats are taken.
+                    socket_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+                    if (socket_read != 1)
+                    {
+                        close(client_fd);
+                        common::print_error("Failed to notify server.");
+                    }
                 }
             }
             else
             {
                 cout << "Seat " << message << " is already taken\n";
-                string busy_message = "BUSY";
-                for (auto& [seat, fd] : seats_status)
+                string occupied_seats;
+                for (auto& [key, value] : seats_status)
                 {
-                    if (fd != -1) { busy_message += seat; }
+                    if (value != -1) {occupied_seats += key;}
                 }
                 seats_mutex.unlock();
-                busy_message += "\r\n";
-                common::write_to_socket(client_fd, busy_message.data(), busy_message.size());
-                string server_message = "c";
-                common::write_to_socket(pipe_write_fd, server_message.data(), 1);
+                socket_write = senders::send_busy(client_fd, occupied_seats);
+                if (socket_write <= 0)
+                {
+                    close(client_fd);
+                    common::print_error("Failed to send BUSY message.");
+                    return;
+                }
                 return;
             }
 
-            // Read messages from the client.
-            /*for(;;)
-            {
-                // Setup the poll for the client and the pipe.
-                struct pollfd poll_descriptors[2];
-                poll_descriptors[0].fd = client_fd;
-                poll_descriptors[0].events = POLLIN;
-                poll_descriptors[1].fd = pipe_read_fd;
-                poll_descriptors[1].events = POLLIN;
+            // Managed to get a place at the table.
+            // Setup the poll for the client and the pipe.
+            struct pollfd poll_descriptors[2];
+            poll_descriptors[0].fd = client_fd;
+            poll_descriptors[0].events = POLLIN;
+            poll_descriptors[1].fd = server_write_pipes[array_mapping[seat]][0];
+            poll_descriptors[1].events = POLLIN;
 
-                int poll_result = poll(&poll_descriptors[0], 2, -1);
-                if (poll_result < 0)
+            bool b_was_destined_to_play = false;
+
+            // Read messages from the client.
+            for(;;)
+            {
+                int poll_result = poll(&poll_descriptors[0], 2, 5000);
+                if (poll_result == 0)
                 {
-                    cout << "Failed to poll\n";
-                    exit(1);
+                    socket_write = senders::send_trick(client_fd, current_trick, cards_on_table);
+                    if (socket_write <= 0)
+                    {
+                        close(client_fd);
+                        common::print_error("Failed to send TRICK message.");
+                        pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                        if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                        return;
+                    }
                 }
-                else if (poll_result == 0)
+                else if (poll_result < 0)
                 {
-                    cout << "De fuq?\n";
-                    continue;
+                    close(client_fd);
+                    common::print_error("Failed to poll.");
+                    return;  
                 }
                 else
                 {
-                    cout << "TO BE CONTINUED\n";
+                    if (poll_descriptors[0].revents & POLLIN)
+                    { // Client sent a message.
+                        string client_message;
+                        socket_read = common::read_from_socket(client_fd, client_message);
+                        if (socket_read == 0)
+                        {
+                            // Client disconnected.
+                            close(client_fd);
+                            string server_message = "c";
+                            common::print_error("Failed to read from client.");
+                            pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+                            if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                            return;
+                        }
+                        else if (socket_read < 0)
+                        {
+                            // Error.
+                            close(client_fd);
+                            string server_message = "c";
+                            common::print_error("Client disconnected.");
+                            pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+                            if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                            return;
+                        }
+
+
+                        if (regex::TRICK_client_check(client_message))
+                        {
+                            cout << "Client " << seat << " played a card\n";
+                            if (b_was_destined_to_play)
+                            {
+                                // Set current message;
+                                current_message_mutex.lock();
+                                current_message = client_message;
+                                current_message_mutex.unlock();
+                                // Notify server that the client played a card.
+                                string server_message = "p";
+                                pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+                                if (pipe_write != 1) 
+                                {
+                                    close(client_fd);
+                                    common::print_error("Failed to notify server.");
+                                    return;
+                                }
+                                b_was_destined_to_play = false;
+                            }
+                            else
+                            {
+                                // Client send a message out of order.
+                                socket_write = senders::send_wrong(client_fd, current_trick);
+                                if (socket_write <= 0)
+                                {
+                                    close(client_fd);
+                                    common::print_error("Failed to send WRONG message.");
+                                    pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                                    if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                                    return;
+                                }
+                            }
+                            
+                        }
+                        else
+                        {
+                            // Invalid message, close the connection.
+                            close(client_fd);
+                            common::print_error("Client send invalid message.");
+                            pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                            if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                            return;
+                        }
+                    }
+                    
+                    if (poll_descriptors[1].revents & POLLIN)
+                    { // Server sent a message.
+                        string server_message;
+                        pipe_read = common::read_from_pipe(pipe_read_fd, server_message);
+                        if (pipe_read == 0)
+                        {
+                            // Server disconnected. SHouldn't happen but whatever, close connections.
+                            close(client_fd);
+                            common::print_error("Server disconnected.");
+                            return;
+                        }
+                        else if (pipe_read < 0)
+                        {
+                            // Error communicating with the server.
+                            close(client_fd);
+                            common::print_error("Failed to read from server.");
+                            return;
+                        }
+
+                        if (server_message == "p")
+                        {
+                            // Server wants the client to play a card.
+                            socket_write = senders::send_trick(client_fd, current_trick, cards_on_table);
+                            if (socket_write <= 0)
+                            {
+                                close(client_fd);
+                                common::print_error("Failed to send TRICK message.");
+                                pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                                if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                                return;
+                            }
+                            b_was_destined_to_play = true;
+                        }
+                        else if (server_message == "c")
+                        {
+                            // Server wants the client to disconnect.
+                            close(client_fd);
+                            return;
+                        }
+                        else if(server_message == "s")
+                        {
+                            // Score.
+                            socket_write = senders::send_score(client_fd, round_scores);
+                            if (socket_write <= 0)
+                            {
+                                close(client_fd);
+                                common::print_error("Failed to send SCORE message.");
+                                pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                                if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                                return;
+                            }
+                        }
+                        else if(server_message == "t")
+                        {
+                            // Total score.
+                            socket_write = senders::send_total(client_fd, total_scores);
+                            if (socket_write <= 0)
+                            {
+                                close(client_fd);
+                                common::print_error("Failed to send TOTAL message.");
+                                pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
+                                if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            // Server send invalid message.
+                            close(client_fd);
+                            common::print_error("Server send invalid message.");
+                            return;
+                        }
+                    }
                 }
-            }*/
+            }
         }
+        else
+        {
+            common::print_error("Client send invalid message.");
+        }
+        close(client_fd);
     }
 } // namespace serwer
 

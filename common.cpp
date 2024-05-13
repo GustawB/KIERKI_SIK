@@ -11,14 +11,20 @@ ssize_t common::read_from_socket(int socket_fd, string& buffer)
         char c;
         ssize_t bytes_read = read(socket_fd, &c, 1);
 
-        if (bytes_read == 0) {return bytes_read;}
+        if (bytes_read <= 0) {return bytes_read;}
         else 
         { // Managed to read without problems.
             buffer += c;
-            if (buffer.length() >= 2 && buffer.ends_with(DELIMETER)) {return 1;}
+            if (buffer.length() >= 2 && buffer.ends_with(DELIMETER)) {return buffer.length();}
         }
     }
 
+    return bytes_read;
+}
+
+ssize_t common::read_from_pipe(int pipe_fd, string& buffer)
+{
+    ssize_t bytes_read = read(pipe_fd, buffer.data(), 1);
     return bytes_read;
 }
 
@@ -38,4 +44,20 @@ ssize_t common::write_to_socket(int socket_fd, char* buffer, size_t buffer_lengt
     }
 
     return store_buff_len - buffer_length;
+}
+
+ssize_t common::write_to_pipe(int pipe_fd, char* buffer)
+{
+    ssize_t bytes_written = write(pipe_fd, buffer, 1);
+    return bytes_written;
+}
+
+void common::print_error(const string& error_message)
+{
+    cerr << "\n\tERROR: " << error_message;
+    if (errno != 0)
+    {
+        cerr << " (" << errno << ")\n";
+    }
+    else {cerr << "\n";}
 }
