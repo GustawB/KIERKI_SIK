@@ -61,3 +61,43 @@ void common::print_error(const string& error_message)
     }
     else {cerr << "\n";}
 }
+
+ssize_t common::create_socket()
+{
+    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_fd == -1) {print_error("Failed to create socket.");}
+    return socket_fd;
+}
+
+ssize_t common::setup_server_socket(int port, int queue_size)
+{
+    int server_fd = create_socket();
+    if (server_fd == -1) {return -1;}
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+
+    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)
+    {
+        print_error("Failed to bind server socket.");
+        return -1;
+    }
+
+    if (listen(server_fd, queue_size) == -1)
+    {
+        print_error("Failed to listen on server socket.");
+        return -1;
+    }
+
+    return server_fd;
+}
+
+ssize_t common::accept_client(int socket_fd)
+{
+    struct sockaddr_in client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+    int client_fd = accept(socket_fd, (struct sockaddr*)&client_addr, &client_addr_len);
+    return client_fd;
+}

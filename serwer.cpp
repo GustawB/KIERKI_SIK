@@ -139,128 +139,6 @@ void Serwer::run_game()
     }
 }
 
-void Serwer::handle_connections()
-{
-    // Create a socket.
-    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd < 0) 
-    {
-        cout << "Failed to create socket\n";
-        exit(1);    
-    }
-
-    // Bind the socket to a concrete address.
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET; // IPv4
-    server_address.sin_addr.s_addr = htonl(INADDR_ANY); // Listening on all interfaces.
-    server_address.sin_port = htons(port);
-
-    if (bind(socket_fd, (struct sockaddr *) &server_address, (socklen_t) sizeof(server_address)) < 0)
-    {
-        cout << "Failed to bind socket\n";
-        exit(1);
-    }
-
-    // Switch the socket to listening.
-    if (listen(socket_fd, QUEUE_SIZE) < 0)
-    {
-        cout << "Failed to listen\n";
-        exit(1);
-    }
-
-    cout << "Listening on port " << port << "\n";
-
-    // Four for seats, one for server, one for new connection.
-    vector<struct pollfd> poll_descriptors(6);
-    vector<int> pipe_fds(6, -1);
-    poll_descriptors[0].fd = socket_fd;
-    poll_descriptors[0].events = POLLIN;
-    // Initialize the rest of the fds.
-
-    for (poll_size i = 1; i < 6; i++)
-    {
-        poll_descriptors[i].fd = -1;
-        poll_descriptors[i].events = POLLIN;
-    }
-
-    for (;;) 
-    {
-        // Reset the revents.
-        for (poll_size i = 0; i < poll_descriptors.size(); ++i)
-        {
-            poll_descriptors[i].revents = 0;
-        }
-
-        int poll_result = poll(&poll_descriptors[0], poll_descriptors.size(), -1);
-        if (poll_result < 0)
-        {
-            cout << "Failed to poll\n";
-            exit(1);
-        }
-        else if (poll_result == 0)
-        {
-            cout << "De fuq?\n";
-            continue;
-        }
-        else
-        {
-            // Handle the new connection.
-            if (poll_descriptors[0].revents & POLLIN)
-            {
-                struct sockaddr_in client_address;
-                socklen_t client_address_len = sizeof(client_address);
-                int client_fd = accept(socket_fd, (struct sockaddr *) &client_address,
-                                    &client_address_len);
-                if (client_fd < 0) 
-                {
-                    cout << "Failed to accept connection\n";
-                    exit(1);
-                }
-
-                int pipe_write_fd[2], pipe_read_fd[2];
-                if (pipe(pipe_write_fd) < 0 || pipe(pipe_read_fd) < 0)
-                {
-                    cout << "Failed to create pipes\n";
-                    exit(1);
-                }
-
-                poll_descriptors.push_back({pipe_read_fd[0], POLLIN, 0});
-                pipe_fds.push_back(pipe_write_fd[1]);
-                cout << "Accepted connection\n";
-                thread client_thread(&Serwer::handle_client, this, client_fd, pipe_read_fd[1], pipe_write_fd[0]);
-                client_thread.detach();
-            }
-
-            // Handle new clients that are eligible for the place at the table.
-            for (poll_size i = 6; i < poll_descriptors.size(); ++i)
-            {
-                if (poll_descriptors[i].revents & POLLIN)
-                {
-                    // Client managed to reserve a spot at the table. Move him to the top four fds.
-                    string msg{"0"};
-                    ssize_t bytes_read = read(poll_descriptors[i].fd, msg.data(), 1);
-                    if (bytes_read < 0)
-                    {
-                        cout << "Failed to read from client\n";
-                        exit(1);
-                    }
-                    for (int j = 1; j < 5; ++j)
-                    {
-                        if (poll_descriptors[j].fd == -1)
-                        {
-                            poll_descriptors[j] = poll_descriptors[i];
-                            auto iter = poll_descriptors.begin() + i;
-                            poll_descriptors.erase(iter);
-                            --i;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 void Serwer::close_fds(const std::string& error_message, initializer_list<int> fds)
 {
     common::print_error(error_message);
@@ -272,12 +150,22 @@ void Serwer::close_fds(initializer_list<int> fds)
     for (int fd : fds) { close(fd); }
 }
 
-void Serwer::close_client_thread(const string& error_message, 
+void Serwer::close_thread(const string& error_message, 
 initializer_list<int> fds, const string& seat)
 {
     common::print_error(error_message);
     string server_message = "c";
     ssize_t pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+    if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+    for (int fd : fds) { close(fd); }
+}
+
+void Serwer::close_thread(const string& error_message, 
+initializer_list<int> fds, int position)
+{
+    common::print_error(error_message);
+    string server_message = "c";
+    ssize_t pipe_write = common::write_to_pipe(server_read_pipes[position][1], server_message.data());
     if (pipe_write != 1) {common::print_error("Failed to notify server.");}
     for (int fd : fds) { close(fd); }
 }
@@ -303,7 +191,7 @@ initializer_list<int> fds, const string& seat)
 
 int Serwer::assert_client_read_pipe(ssize_t result, initializer_list<int> fds)
 {
-    if (result== 0)
+    if (result == 0)
     {
         // Server disconnected. Shouldn't happen but whatever, close connections.
         close_fds("Server disconnected.", fds);
@@ -337,6 +225,80 @@ initializer_list<int> fds, const string& seat)
         return -1;
     }
     return 0;
+}
+
+void Serwer::handle_connections()
+{
+    // Create a socket.
+    int socket_fd = setup_server_socket(port, QUEUE_SIZE);
+    if (socket_fd < 0) {
+        string server_message = "c";
+        ssize_t pipe_write = common::write_to_pipe(server_read_pipes[4][1], server_message.data());
+        if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+        return;
+    }
+
+    // One fd for server, one for new connection.
+    vector<struct pollfd> poll_descriptors(2);
+    poll_descriptors[0].fd = socket_fd;
+    poll_descriptors[0].events = POLLIN;
+    poll_descriptors[1].fd = server_write_pipes[4][0];
+    poll_descriptors[1].events = POLLIN;
+
+    for (;;) 
+    {
+        // Reset the revents.
+        for (poll_size i = 0; i < poll_descriptors.size(); ++i)
+        {
+            poll_descriptors[i].revents = 0;
+        }
+
+        int poll_result = poll(&poll_descriptors[0], poll_descriptors.size(), -1);
+        if (poll_result <= 0)
+        {
+            // Poll failed (we don't expect timeout here).
+            close_thread("Failed to poll.", {socket_fd}, 4);
+            return;
+        }
+        else
+        {
+            // Handle the new connection.
+            if (poll_descriptors[0].revents & POLLIN)
+            {
+                struct sockaddr_in client_address;
+                socklen_t client_address_len = sizeof(client_address);
+                int client_fd = accept_client(socket_fd);
+                if (client_fd < 0) 
+                {
+                    close_thread("Failed to accept connection.", {socket_fd}, 4);
+                }
+
+                cout << "Accepted connection\n";
+                thread client_thread(&Serwer::handle_client, this, client_fd, pipe_read_fd[1], pipe_write_fd[0]);
+                client_thread.detach();
+            }
+
+            // Handle the server.
+            if (poll_descriptors[1].revents & POLLIN)
+            {
+                string server_message;
+                ssize_t pipe_read = common::read_from_pipe(server_write_pipes[4][0], server_message);
+                if (assert_client_read_pipe(pipe_read, {socket_fd}) < 0) { return; }
+                if (server_message == "c")
+                {
+                    // Server wants to close the connection.
+                    close_fds({socket_fd});
+                    return;
+                }
+                else
+                {
+                    // Server send invalid message.
+                    close_fds("Server send invalid message.", {socket_fd});
+                    return;
+                }
+            }
+        }
+    }
 }
 
 int Serwer::reserve_spot(int client_fd, int pipe_write_fd,
@@ -426,6 +388,12 @@ int pipe_read_fd, const string& seat)
     // Read messages from the client.
     for(;;)
     {
+        // Reset the revents.
+        for (poll_size i = 0; i < poll_descriptors.size(); ++i)
+        {
+            poll_descriptors[i].revents = 0;
+        }
+
         int poll_result = poll(&poll_descriptors[0], 2, 5000);
         if (poll_result == 0)
         { // Timeout.
@@ -435,7 +403,7 @@ int pipe_read_fd, const string& seat)
         }
         else if (poll_result < 0)
         {
-            close_fds("Failed to poll.", {client_fd, pipe_write_fd, pipe_read_fd});
+            close_client_thread("Failed to poll.", {client_fd, pipe_write_fd, pipe_read_fd}, seat);
             return -1;  
         }
         else

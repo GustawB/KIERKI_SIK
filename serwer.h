@@ -48,7 +48,8 @@ private:
     int reserve_spot(int client_fd, int pipe_write_fd, int pipe_read_fd, string& seat);
     int client_poll(int client_fd, int pipe_write_fd, int pipe_read_fd, const string& seat);
     void handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd);
-    void close_client_thread(const string& error_message, initializer_list<int> fds, const string& seat);
+    void close_thread(const string& error_message, initializer_list<int> fds, const string& seat);
+    void close_thread(const string& error_message, initializer_list<int> fds, int position);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
     void close_fds(initializer_list<int> fds);
     int assert_client_read_socket(ssize_t result, initializer_list<int> fds, const string& seat);
