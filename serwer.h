@@ -48,8 +48,12 @@ namespace serwer
         void handle_connections();
         void handle_client(int client_fd, int pipe_write_fd, int pipe_read_fd);
         void close_client_thread(const string& error_message, initializer_list<int> fds);
+        void close_fds(const std::string& error_message, initializer_list<int> fds);
+        void close_fds(initializer_list<int> fds);
         int assert_client_read_socket(ssize_t result, initializer_list<int> fds);
         int assert_client_write_socket(ssize_t result, initializer_list<int> fds);
+        int assert_client_read_pipe(ssize_t result, initializer_list<int> fds);
+        int assert_client_write_pipe(ssize_t result, initializer_list<int> fds);
 
         int port;
         int timeout;
@@ -339,6 +343,17 @@ namespace serwer
         }
     }
 
+    inline void Serwer::close_fds(const std::string& error_message, initializer_list<int> fds)
+    {
+        common::print_error(error_message);
+        for (int fd : fds) { close(fd); }
+    }
+
+    inline void Serwer::close_fds(initializer_list<int> fds)
+    {
+        for (int fd : fds) { close(fd); }
+    }
+
     inline void Serwer::close_client_thread(const string& error_message, initializer_list<int> fds)
     {
         common::print_error(error_message);
@@ -361,6 +376,34 @@ namespace serwer
         {
             // Error.
             close_client_thread("Failed to read from client.", fds);
+            return -1;
+        }
+        return 0;
+    }
+
+    inline int Serwer::assert_client_read_pipe(ssize_t result, initializer_list<int> fds)
+    {
+        if (result== 0)
+        {
+            // Server disconnected. Shouldn't happen but whatever, close connections.
+            close_fds("Server disconnected.", fds);
+            return -1;
+        }
+        else if (result < 0)
+        {
+            // Error communicating with the server.
+            close_fds("Failed to read from server.", fds);
+            close(client_fd);
+            return -1;
+        }
+        return 0;
+    }
+
+    inline int Serwer::assert_client_write_pipe(ssize_t result, initializer_list<int> fds)
+    {
+        if (result != 1)
+        {
+            close_fds("Failed to notify server.", fds);
             return -1;
         }
         return 0;
@@ -389,13 +432,12 @@ namespace serwer
         if (socket_read == 0) 
         {
             // Client disconnected. Here we don't have to worry about anything, end execution.
-            close(client_fd);
+            close_fds({client_fd, pipe_write_fd, pipe_read_fd});
             return; 
         }
         else if (socket_read < 0)
         {
-            close(client_fd);
-            common::print_error("Failed to read IAM message.");
+            close_fds("Failed to read IAM message.", {client_fd, pipe_write_fd, pipe_read_fd});
         }
         if (regex::IAM_check(message))
         {
@@ -414,11 +456,7 @@ namespace serwer
                     string server_message = "c";
                     // Notify the server that all seats are taken.
                     socket_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
-                    if (socket_read != 1)
-                    {
-                        close(client_fd);
-                        common::print_error("Failed to notify server.");
-                    }
+                    if (assert_client_write_pipe(socket_write, {client_fd, pipe_write_fd, pipe_read_fd}) < 0) {return;}
                 }
             }
             else
@@ -431,13 +469,12 @@ namespace serwer
                 }
                 seats_mutex.unlock();
                 socket_write = senders::send_busy(client_fd, occupied_seats);
-                if (socket_write <= 0)
+                if (assert_client_write_socket(socket_write, {client_fd, pipe_write_fd, pipe_read_fd}) < 0) {return;}
+                else 
                 {
-                    close(client_fd);
-                    common::print_error("Failed to send BUSY message.");
+                    close_fds(client_fd);
                     return;
                 }
-                return;
             }
 
             // Managed to get a place at the table.
@@ -485,13 +522,7 @@ namespace serwer
                                 // Notify server that the client played a card.
                                 string server_message = "p";
                                 pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
-                                if (pipe_write != 1) 
-                                {
-                                    close(client_fd);
-                                    common::print_error("Failed to notify server.");
-                                    return;
-                                }
-                                b_was_destined_to_play = false;
+                                if (assert_client_write_pipe(pipe_write, {client_fd, pipe_write_fd, pipe_read_fd}) < 0) {return;}
                             }
                             else
                             {
@@ -504,11 +535,7 @@ namespace serwer
                         else
                         {
                             // Invalid message, close the connection.
-                            close(client_fd);
-                            common::print_error("Client send invalid message.");
-                            pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], "c");
-                            if (pipe_write != 1) {common::print_error("Failed to notify server.");}
-                            return;
+                            close_client_thread("Client send invalid message.", {client_fd, pipe_write_fd, pipe_read_fd});
                         }
                     }
                     
@@ -516,20 +543,7 @@ namespace serwer
                     { // Server sent a message.
                         string server_message;
                         pipe_read = common::read_from_pipe(pipe_read_fd, server_message);
-                        if (pipe_read == 0)
-                        {
-                            // Server disconnected. SHouldn't happen but whatever, close connections.
-                            close(client_fd);
-                            common::print_error("Server disconnected.");
-                            return;
-                        }
-                        else if (pipe_read < 0)
-                        {
-                            // Error communicating with the server.
-                            close(client_fd);
-                            common::print_error("Failed to read from server.");
-                            return;
-                        }
+                        if (assert_client_read_pipe(pipe_read, {client_fd, pipe_write_fd, pipe_read_fd}) < 0) {return;}
 
                         if (server_message == "p")
                         {
@@ -541,7 +555,7 @@ namespace serwer
                         else if (server_message == "c")
                         {
                             // Server wants the client to disconnect.
-                            close(client_fd);
+                            close_fds({client_fd, pipe_write_fd, pipe_read_fd});
                             return;
                         }
                         else if(server_message == "s")
@@ -559,8 +573,7 @@ namespace serwer
                         else
                         {
                             // Server send invalid message.
-                            close(client_fd);
-                            common::print_error("Server send invalid message.");
+                            close_fds("Server send invalid message.", {client_fd, pipe_write_fd, pipe_read_fd});
                             return;
                         }
                     }
@@ -571,7 +584,7 @@ namespace serwer
         {
             common::print_error("Client send invalid message.");
         }
-        close(client_fd);
+        close_fds({client_fd, pipe_write_fd, pipe_read_fd});
     }
 } // namespace serwer
 
