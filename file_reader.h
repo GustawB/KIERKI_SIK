@@ -1,3 +1,6 @@
+#ifndef FILE_READER_H
+#define FILE_READER_H
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -73,3 +76,5 @@ namespace file_reader
         return 1;
     }  
 } // namespace file_reader
+
+#endif // FILE_READER_H
