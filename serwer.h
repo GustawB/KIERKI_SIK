@@ -52,12 +52,18 @@ private:
     void close_thread(const string& error_message, initializer_list<int> fds, int position);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
     void close_fds(initializer_list<int> fds);
+
     int assert_client_read_socket(ssize_t result, initializer_list<int> fds, const string& seat);
     int assert_client_write_socket(ssize_t result, initializer_list<int> fds, const string& seat);
     int assert_client_read_pipe(ssize_t result, initializer_list<int> fds);
     int assert_client_write_pipe(ssize_t result, initializer_list<int> fds);
 
+    int assert_server_read_pipe(ssize_t result);
+    int assert_server_write_pipe(ssize_t result);
+
     void close_server();
+
+    int handle_disconnections();
 
     int port;
     int timeout;
@@ -85,6 +91,9 @@ private:
 
     map<string, int32_t> round_scores;
     map<string, int32_t> total_scores;
+
+    string last_played_card;
+    mutex last_played_card_mutex;
 };
 
 #endif // SERWER_H
