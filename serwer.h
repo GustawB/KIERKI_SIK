@@ -57,6 +57,8 @@ private:
     int assert_client_read_pipe(ssize_t result, initializer_list<int> fds);
     int assert_client_write_pipe(ssize_t result, initializer_list<int> fds);
 
+    void close_server();
+
     int port;
     int timeout;
     string game_file_name;

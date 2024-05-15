@@ -13,53 +13,6 @@ Serwer::~Serwer()
     connection_manager_thread.join();
 }
 
-void Serwer::start_game()
-{
-    cout << "Starting the game\n";
-    for (int i = 0; i < 5; ++i)
-    {
-        if (pipe(server_read_pipes[i]) < 0 || pipe(server_write_pipes[i]) < 0)
-        {
-            cout << "Failed to create pipes\n";
-            exit(1);
-        }
-    }
-
-    cout << "Pipes created\n";
-
-    struct pollfd poll_descriptors[5];
-    for (int i = 0; i < 5; ++i)
-    {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-
-    cout << "Poll descriptors created\n";
-
-    connection_manager_thread = thread(&Serwer::handle_connections, this);
-    
-    int poll_result = poll(poll_descriptors, 5, -1);
-    if (poll_result < 0)
-    {
-        cout << "Failed to poll\n";
-        exit(1);
-    }
-    else if (poll_result == 0)
-    {
-        cout << "De fuq?\n";
-    }
-    else
-    {
-        for (int i = 0; i < 5; ++i)
-        {
-            if (poll_descriptors[i].revents & POLLIN)
-            {
-                cout << "Server woken up by " << i << " thread\n";
-            }
-        }
-    }
-}
-
 void Serwer::run_game()
 {
     // Here we should have all 4 clients.
@@ -227,6 +180,127 @@ initializer_list<int> fds, const string& seat)
     return 0;
 }
 
+void Serwer::close_server()
+{
+    for (int i = 0; i < 5; ++i)
+    {
+        common::
+        // Should cause threads to get PIPE error.
+        close(server_read_pipes[i][0]);
+        // Should cause threads to get POLLHUP.
+        close(server_write_pipes[i][1]);
+    }
+
+    // Join client threads.
+    struct pollfd poll_descriptors[5];
+    for (int i = 0; i < 4; ++i)
+    {
+        poll_descriptors[i].fd = server_read_pipes[i][0];
+        poll_descriptors[i].events = POLLIN;
+    }
+
+    int poll_result = poll(poll_descriptors, 4, -1);
+    if (poll_result <= 0) 
+    {
+        for (int i = 0; i < 4; ++i) 
+        {
+            // Close my ends of pipes.
+            close(server_read_pipes[i][0]);
+            close(server_write_pipes[i][1]);
+            common::print_error("Failed to poll on server exit.");
+        }
+    }
+    else
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            if (poll_descriptors[i].revents & POLLIN)
+            {
+                // Server woken up by a client.
+                break;
+            }
+        }
+        // Close my ends of pipes.
+        for (int i = 0; i < 4; ++i) 
+        {
+            // Close my ends of pipes.
+            close(server_read_pipes[i][0]);
+            close(server_write_pipes[i][1]);
+        }
+    }
+
+    // Await connection thread.
+    try 
+    {
+        connection_manager_thread.join();
+    }
+    catch (const std::system_error& e)
+    {
+        common::print_error("Failed to join connection manager thread.");
+    }
+
+    // Close the connection_thread-related pipes socket.
+    close(server_read_pipes[4][0]);
+    close(server_write_pipes[4][1]);
+}
+
+void Serwer::start_game()
+{
+    cout << "Starting the game\n";
+    for (int i = 0; i < 5; ++i)
+    {
+        if (pipe(server_read_pipes[i]) < 0 || pipe(server_write_pipes[i]) < 0)
+        {
+            common::print_error("Failed to create pipes.");
+            --i;
+            // Close previously created descriptors.
+            while (i >= 0) 
+            {
+                close(server_read_pipes[i][0]);
+                close(server_read_pipes[i][1]);
+                close(server_write_pipes[i][0]);
+                close(server_write_pipes[i][1]);
+                --i;
+            }
+            return;
+        }
+    }
+
+    cout << "Pipes created\n";
+
+    struct pollfd poll_descriptors[5];
+    for (int i = 0; i < 5; ++i)
+    {
+        poll_descriptors[i].fd = server_read_pipes[i][0];
+        poll_descriptors[i].events = POLLIN;
+    }
+
+    cout << "Poll descriptors created\n";
+
+    connection_manager_thread = thread(&Serwer::handle_connections, this);
+    
+    int poll_result = poll(poll_descriptors, 5, -1);
+    if (poll_result <= 0)
+    {
+        cout << "Failed to poll\n";
+        exit(1);
+    }
+    else if (poll_result == 0)
+    {
+        cout << "De fuq?\n";
+    }
+    else
+    {
+        for (int i = 0; i < 5; ++i)
+        {
+            if (poll_descriptors[i].revents & POLLIN)
+            {
+                cout << "Server woken up by " << i << " thread\n";
+            }
+        }
+    }
+}
+
 void Serwer::handle_connections()
 {
     // Create a socket.
@@ -344,8 +418,7 @@ int Serwer::reserve_spot(int client_fd, string& seat)
             }
             seats_mutex.unlock();
             ssize_t socket_write = senders::send_busy(client_fd, occupied_seats);
-            if (assert_client_write_socket(socket_write,
-            {client_fd}, seat) < 0) {return -1;}
+            if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
             else 
             {
                 close_fds({client_fd});
