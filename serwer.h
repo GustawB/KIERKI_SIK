@@ -45,7 +45,9 @@ public:
     void run_game();
 
 private:
-    int run_deal(int32_t trick_type);
+    int run_deal(int32_t trick_type, const string& seat);
+
+    int barrier(int16_t type);
 
     void handle_connections();
     int reserve_spot(int client_fd, string& seat);
@@ -91,6 +93,7 @@ private:
     mutex current_message_mutex;
 
     vector<string> cards_on_table;
+    mutex cards_on_table_mutex;
 
     map<string, int32_t> round_scores;
     map<string, int32_t> total_scores;
@@ -103,7 +106,9 @@ private:
     mutex cards_mutex;
 
     string last_taker;
-    mutex last_taker_mutex;
+
+    int32_t waiting_on_barrier;
+    mutex barrier_mutex;
 };
 
 #endif // SERWER_H
