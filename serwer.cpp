@@ -374,7 +374,8 @@ void Serwer::run_game()
             }
         }
 
-        // Got four cards.        
+        // Got four cards.
+                
     }
 }
 
