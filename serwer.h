@@ -19,6 +19,7 @@
 #include "senders.h"
 #include "retrievers.h"
 #include "file_reader.h"
+#include "points_calculator.h"
 
 #define QUEUE_SIZE 69
 
@@ -44,6 +45,8 @@ public:
     void run_game();
 
 private:
+    int run_deal(int32_t trick_type);
+
     void handle_connections();
     int reserve_spot(int client_fd, string& seat);
     int client_poll(int client_fd, const string& seat);
@@ -91,9 +94,16 @@ private:
 
     map<string, int32_t> round_scores;
     map<string, int32_t> total_scores;
+    mutex scores_mutex;
 
     string last_played_card;
     mutex last_played_card_mutex;
+
+    array<string, 4> cards;
+    mutex cards_mutex;
+
+    string last_taker;
+    mutex last_taker_mutex;
 };
 
 #endif // SERWER_H

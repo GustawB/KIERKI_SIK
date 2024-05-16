@@ -18,6 +18,8 @@ public:
     PointsCalculator(const array<string, 4>& played_cards, const string& starter, int16_t hand, int16_t trick);
     ~PointsCalculator() = default;
 
+    pair<string, int16_t> calculate_points();
+
 private:
     string find_taker();
     pair<string, int16_t> no_tricks(const string& taker);
@@ -28,7 +30,7 @@ private:
     pair<string, int16_t> no_seventh_last_trick(const string& taker);
     pair<string, int16_t> bandit(const string& taker);
 
-    int16_t hand;
+    int16_t trick_type;
     int16_t trick;
     string starter;
     array<string, 4> colors;

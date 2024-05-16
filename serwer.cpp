@@ -4,8 +4,8 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     : port{port}, timeout{timeout}, game_file_name{game_file_name}, 
     client_threads{}, client_threads_mutex{}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_mutex{}, array_mapping{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}, 
-    current_message{}, current_message_mutex{}, cards_on_table{}, round_scores{}, total_scores{},
-    last_played_card{}, last_played_card_mutex{}
+    current_message{}, current_message_mutex{}, cards_on_table{}, round_scores{}, total_scores{}, scores_mutex{},
+    last_played_card{}, last_played_card_mutex{}, cards{}, cards_mutex{}, last_taker{}, last_taker_mutex{}
     {}
     
 
@@ -290,34 +290,19 @@ int Serwer::handle_disconnections()
     return 0;
 }
 
-void Serwer::run_game()
+int Serwer::run_deal(int32_t trick_type)
 {
-    // Here we should have all 4 clients.
-    cout << "Running the game\n";
-    struct pollfd poll_descriptors[5];
-    for (int i = 0; i < 5; ++i)
+    array<string, 4> seats = {"N", "E", "S", "W"};
+    array<string, 4> played_this_round = {"", "", "", ""};
+    array<int16_t, 4> scores{0, 0, 0, 0};
+    int beginning = array_mapping[seat];
+    for (int i = 0; i < 13; ++i)
     {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-
-    file_reader::FileReader fr(game_file_name);
-
-    // First operation after being waken up should run normally.
-    bool b_there_are_four_players = true;
-    while (fr.read_next_deal() > 0) 
-    {
-        int16_t trick = fr.get_trick_type();
-        string seat = fr.get_seat();
-        array<string, 4> cards = fr.get_cards();
-        array<string, 4> seats = {"N", "E", "S", "W"};
-        array<string, 4> played_this_round = {"", "", "", ""};
-        int beginning = array_mapping[seat];
         for (int i = 0; i < 4; ++i)
         {
             string message = "p";
             ssize_t pipe_write common::write_to_pipe(server_write_pipes[(beginning + i) % 4][1], message.data());
-            if (assert_server_write_pipe(pipe_write) < 0) {return;}
+            if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
             bool b_received_card = false;
             while (!b_received_card)
             {
@@ -327,7 +312,7 @@ void Serwer::run_game()
                 {
                     common::print_error("Failed to poll while waiting for a card.");
                     close_server();
-                    return;
+                    return -1;
                 }
                 else
                 {
@@ -337,8 +322,8 @@ void Serwer::run_game()
                         {
                             string thread_message;
                             ssize_t pipe_read = common::read_from_pipe(server_read_pipes[j][0], thread_message);
-                            if (assert_server_read_pipe(pipe_read) < 0) {return;}
-                            if (thread_message == "p")
+                            if (assert_server_read_pipe(pipe_read) < 0) {return -1;}
+                            if (thread_message == "p" && j == (beginning + i) % 4)
                             {
                                 // Client played a card.
                                 last_played_card_mutex.lock();
@@ -358,15 +343,15 @@ void Serwer::run_game()
                                 else
                                 {
                                     // Wait for threads.
-                                    if (handle_disconnections() < 0) {return;}
+                                    if (handle_disconnections() < 0) {return -1;}
                                 }
                             }
                             else
                             {
                                 // Invalid message.
-                                common::print_error("Invalid message in main game server poll from client.");
+                                common::print_error("Invalid message in main game server poll from client thread.");
                                 close_server();
-                                return;
+                                return -1;
                             }
                         }
                     }
@@ -375,8 +360,61 @@ void Serwer::run_game()
         }
 
         // Got four cards.
-                
+        calculator = PointsCalculator(played_this_round, seats[beginning], trick_type, i + 1);
+        pair<string, int16_t> result = calculator.calculate_points();
+        last_taker_mutex.lock();
+        last_taker = result.first;
+        last_taker_mutex.unlock();
+        round_scores[array_mapping[result.first]] += result.second;
+        taker = result.first;
+        for (int i = 0; i < 4; ++i)
+        {
+            string message = "e";
+            ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
+            if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
+        }
     }
+
+    // End of the deal.
+    scores_mutex.lock();
+    for (int i = 0; i < 4; ++i) { total_scores[seats[i]] += scores[i]; }
+    round_scores = scores;
+    scores_mutex.unlock();
+    for (int i = 0; i < 4; ++i)
+    {
+        string message = "s";
+        ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
+        if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
+    }
+}
+
+void Serwer::run_game()
+{
+    // Here we should have all 4 clients.
+    cout << "Running the game\n";
+    struct pollfd poll_descriptors[5];
+    for (int i = 0; i < 5; ++i)
+    {
+        poll_descriptors[i].fd = server_read_pipes[i][0];
+        poll_descriptors[i].events = POLLIN;
+    }
+
+    file_reader::FileReader fr(game_file_name);
+
+    // First operation after being waken up should run normally.
+    bool b_there_are_four_players = true;
+    int32_t hand = 1;
+    while (fr.read_next_deal() > 0) 
+    {
+        int16_t trick_type = fr.get_trick_type();
+        string seat = fr.get_seat();
+        array<string, 4> raw_cards = fr.get_cards();
+        cards_mutex.lock();
+        for (int i = 0; i < 4; ++i) { cards[i] = regex::extract_cards(raw_cards[i]); }
+        cards_mutex.unlock();
+        if (run_deal(trick_type) < 0) {return;} 
+    }
+    close_server();
 }
 
 void Serwer::handle_connections()
