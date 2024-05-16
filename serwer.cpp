@@ -369,7 +369,7 @@ int Serwer::run_deal(int32_t trick_type)
         taker = result.first;
         for (int i = 0; i < 4; ++i)
         {
-            string message = "e";
+            string message = "s";
             ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
             if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
         }
@@ -593,8 +593,7 @@ int Serwer::client_poll(int client_fd, const string& seat)
             { // Client sent a message.
                 string client_message;
                 socket_read = common::read_from_socket(client_fd, client_message);
-                if (assert_client_read_socket(socket_read,
-                {client_fd}, seat) < 0) {return -1;}
+                if (assert_client_read_socket(socket_read, {client_fd}, seat) < 0) {return -1;}
                 if (regex::TRICK_client_check(client_message))
                 {
                     cout << "Client " << seat << " played a card\n";
@@ -649,17 +648,18 @@ int Serwer::client_poll(int client_fd, const string& seat)
                 }
                 else if(server_message == "s")
                 {
+                    scores_mutex.lock();
+                    array<int32_t, 4> round_scores_loc{round_scores};
+                    array<int32_t, 4> total_scores_loc{total_scores};
+                    scores_mutex.unlock();
+
                     // Score.
-                    socket_write = senders::send_score(client_fd, round_scores);
-                    if (assert_client_write_socket(socket_write,
-                    {client_fd}, seat) < 0) {return -1;}
-                }
-                else if(server_message == "t")
-                {
+                    socket_write = senders::send_score(client_fd, round_scores_loc);
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
+
                     // Total score.
-                    socket_write = senders::send_total(client_fd, total_scores);
-                    if (assert_client_write_socket(socket_write,
-                    {client_fd}, seat) < 0) {return -1;}
+                    socket_write = senders::send_total(client_fd, total_scores_loc);
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
                 }
                 else
                 {
