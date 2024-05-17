@@ -1,8 +1,8 @@
 #include "points_calculator.h"
 
 PointsCalculator::PointsCalculator(const array<string, 4>& played_cards, const string& starter, int16_t trick_type, int16_t trick)
-    : starter{starter}, seats{{ "N", "E", "S", "W" }}, seats_mapping{{ "N", 0 }, { "E", 1 }, { "S", 2 }, { "W", 3 }} ,
-    trick_type{trick_type}, trick{trick}
+    : trick_type{trick_type}, trick{trick}, starter{starter}, seats{{ "N", "E", "S", "W" }},
+    seats_mapping{{ "N", 0 }, { "E", 1 }, { "S", 2 }, { "W", 3 }}
 {
     for (int i = 0; i < 4; i++)
     {
@@ -15,8 +15,6 @@ PointsCalculator::PointsCalculator(const array<string, 4>& played_cards, const s
         else { figures[i] = stoi(figure); }
     }
 }
-
-PointsCalculator::~PointsCalculator() {}
 
 pair<string, int16_t> PointsCalculator::calculate_points()
 {

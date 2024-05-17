@@ -111,10 +111,11 @@ private:
     string last_played_card;
     mutex last_played_card_mutex;
 
-    array<string, 4> cards;
+    array<vector<string>, 4> cards;
     mutex cards_mutex;
 
     string last_taker;
+    mutex last_taker_mutex;
 
     int32_t waiting_on_barrier;
     mutex barrier_mutex;

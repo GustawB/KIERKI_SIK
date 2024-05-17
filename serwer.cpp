@@ -6,7 +6,7 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     seats_mutex{}, array_mapping{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}, 
     current_message{}, current_message_mutex{}, cards_on_table{}, cards_on_table_mutex{}, round_scores{}, total_scores{}, scores_mutex{},
     last_played_card{}, last_played_card_mutex{}, cards{}, cards_mutex{}, last_taker{}, last_taker_mutex{},
-    waiting_on_barrier{0}, barrier_mutex
+    waiting_on_barrier{0}, barrier_mutex{}
     {}
     
 
@@ -312,7 +312,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
     }
     array<string, 4> seats = {"N", "E", "S", "W"};
     array<string, 4> played_this_round = {"", "", "", ""};
-    array<int16_t, 4> scores{0, 0, 0, 0};
+    map<string, int32_t> scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}};
     int beginning = array_mapping[seat];
     for (int i = 0; i < 13; ++i)
     {
@@ -384,12 +384,12 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         last_taker_mutex.lock();
         last_taker = result.first;
         last_taker_mutex.unlock();
-        scores[array_mapping[result.first]] += result.second;
-        taker = result.first;
+        scores[result.first] += result.second;
+        last_taker = result.first;
         for (int i = 0; i < 4; ++i)
         {
             string message = TAKEN;
-            ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
+            ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], message.data());
             if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
         }
 
@@ -399,13 +399,13 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
 
     // End of the deal.
     scores_mutex.lock();
-    for (int i = 0; i < 4; ++i) { total_scores[seats[i]] += scores[i]; }
+    for (const auto& [key, value] : scores) { total_scores[key] += value; }
     round_scores = scores;
     scores_mutex.unlock();
     for (int i = 0; i < 4; ++i)
     {
         string message = SCORES;
-        ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
+        ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], message.data());
         if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
     }
 
@@ -423,8 +423,8 @@ void Serwer::run_game()
     cards_on_table.clear();
     cards_on_table_mutex.unlock();
     // First operation after being waken up should run normally.
-    bool b_there_are_four_players = true;
-    int32_t hand = 1;
+    //bool b_there_are_four_players = true;
+    //int32_t hand = 1;
     while (fr.read_next_deal() > 0) 
     {
         int16_t trick_type = fr.get_trick_type();
@@ -672,7 +672,7 @@ int Serwer::client_poll(int client_fd, const string& seat)
                 {
                     // Server wants the client to send "TAKEN".
                     last_taker_mutex.lock();
-                    string taker_loc{taker};
+                    string taker_loc{last_taker};
                     last_taker_mutex.unlock();
                     cards_on_table_mutex.lock();
                     vector<string> cards_on_table_loc{cards_on_table};
@@ -688,8 +688,8 @@ int Serwer::client_poll(int client_fd, const string& seat)
                 else if(server_message == SCORES)
                 {
                     scores_mutex.lock();
-                    array<int32_t, 4> round_scores_loc{round_scores};
-                    array<int32_t, 4> total_scores_loc{total_scores};
+                    map<string, int32_t> round_scores_loc{round_scores};
+                    map<string, int32_t> total_scores_loc{total_scores};
                     scores_mutex.unlock();
 
                     // Score.
