@@ -99,7 +99,7 @@ namespace klient
         // Send the seat name to the server.
         common::write_to_socket(socket_fd, message.data(), message.size());
 
-        //sleep(100);
+        sleep(500);
 
         close(socket_fd);
         cout << "Connection closed\n";

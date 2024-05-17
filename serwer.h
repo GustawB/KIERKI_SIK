@@ -26,6 +26,8 @@
 #define MISSING_CLIENT_BARRIER 0
 #define END_OF_TRICK_BARRIER 1
 
+#define CONNECTIONS_THREAD "K"
+
 #define DISCONNECTED "c"
 #define CARD_PLAY "p"
 #define BARRIER_RESPONSE "b"
@@ -62,15 +64,14 @@ private:
     int reserve_spot(int client_fd, string& seat);
     int client_poll(int client_fd, const string& seat);
     void handle_client(int client_fd);
-    void close_thread(const string& error_message, initializer_list<int> fds, const string& seat);
-    void close_thread(const string& error_message, initializer_list<int> fds, int position);
+    void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
     void close_fds(initializer_list<int> fds);
 
-    int assert_client_read_socket(ssize_t result, initializer_list<int> fds, const string& seat);
-    int assert_client_write_socket(ssize_t result, initializer_list<int> fds, const string& seat);
-    int assert_client_read_pipe(ssize_t result, initializer_list<int> fds);
-    int assert_client_write_pipe(ssize_t result, initializer_list<int> fds);
+    int assert_client_read_socket(ssize_t result, initializer_list<int> fds, const string& seat, bool b_was_occupying);
+    int assert_client_write_socket(ssize_t result, initializer_list<int> fds, const string& seat, bool b_was_occupying);
+    int assert_client_read_pipe(ssize_t result, initializer_list<int> fds, const string& seat, bool b_was_occupying);
+    int assert_client_write_pipe(ssize_t result, initializer_list<int> fds, const string& seat, bool b_was_occupying);
 
     int assert_server_read_pipe(ssize_t result);
     int assert_server_write_pipe(ssize_t result);

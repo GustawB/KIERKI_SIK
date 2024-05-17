@@ -1,9 +1,10 @@
 #include "serwer.h"
+#include <fcntl.h>
 
 Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     : port{port}, timeout{timeout}, game_file_name{game_file_name}, 
-    client_threads{}, client_threads_mutex{}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
-    seats_mutex{}, array_mapping{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}}, 
+    client_threads{}, client_threads_mutex{}, occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
+    seats_mutex{}, array_mapping{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, current_message_mutex{}, cards_on_table{}, cards_on_table_mutex{}, round_scores{}, total_scores{}, scores_mutex{},
     last_played_card{}, last_played_card_mutex{}, cards{}, cards_mutex{}, last_taker{}, last_taker_mutex{},
     waiting_on_barrier{0}, barrier_mutex{}
@@ -27,77 +28,80 @@ void Serwer::close_fds(initializer_list<int> fds)
 }
 
 void Serwer::close_thread(const string& error_message,
-initializer_list<int> fds, const string& seat)
+initializer_list<int> fds, const string& seat, bool b_was_occupying)
 {
     common::print_error(error_message);
     string server_message = DISCONNECTED;
-    ssize_t pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
-    if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+    if (b_was_occupying)
+    {
+        seats_mutex.lock();
+        --occupied;
+        seats_status[seat] = -1;
+        seats_mutex.unlock();
+    }
+    if (b_was_occupying || seat == CONNECTIONS_THREAD)
+    {
+        ssize_t pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
+        if (pipe_write != 1) {common::print_error("Failed to notify server.");}
+    }
     for (int fd : fds) { close(fd); }
-}
-
-void Serwer::close_thread(const string& error_message,
-initializer_list<int> fds, int position)
-{
-    common::print_error(error_message);
-    string server_message = DISCONNECTED;
-    ssize_t pipe_write = common::write_to_pipe(server_read_pipes[position][1], server_message.data());
-    if (pipe_write != 1) {common::print_error("Failed to notify server.");}
-    for (int fd : fds) { close(fd); }
+    close_fds({server_read_pipes[array_mapping[seat]][1], server_write_pipes[array_mapping[seat]][0]});
 }
 
 int Serwer::assert_client_read_socket(ssize_t result,
-initializer_list<int> fds, const string& seat)
+initializer_list<int> fds, const string& seat, bool b_was_occupying)
 {
     string server_message = DISCONNECTED;
     if (result == 0)
     {
         // Client disconnected.
-        close_thread("Client disconnected.", fds, seat);
+        close_thread("Client disconnected.", fds, seat, b_was_occupying);
         return -1;
     }
     else if (result < 0)
     {
         // Error.
-        close_thread("Failed to read from client.", fds, seat);
+        close_thread("Failed to read from client.", fds, seat, b_was_occupying);
         return -1;
     }
     return 0;
 }
 
-int Serwer::assert_client_read_pipe(ssize_t result, initializer_list<int> fds)
+int Serwer::assert_client_read_pipe(ssize_t result, initializer_list<int> fds,
+const string& seat, bool b_was_occupying)
 {
     if (result == 0)
     {
         // Server disconnected. Shouldn't happen but whatever, close connections.
-        close_fds("Server disconnected.", fds);
+        close_thread("Server disconnected.", fds, seat, b_was_occupying);
         return -1;
     }
     else if (result < 0)
     {
         // Error communicating with the server.
-        close_fds("Failed to read from server.", fds);
+        close_thread("Failed to read from server.", fds, seat, b_was_occupying);
         return -1;
     }
     return 0;
 }
 
-int Serwer::assert_client_write_pipe(ssize_t result, initializer_list<int> fds)
+int Serwer::assert_client_write_pipe(ssize_t result, initializer_list<int> fds,
+const string& seat, bool b_was_occupying)
 {
     if (result != 1)
     {
-        close_fds("Failed to notify server.", fds);
+        close_thread("Failed to notify server.", fds, seat, b_was_occupying);
         return -1;
     }
     return 0;
 }
 
 int Serwer::assert_client_write_socket(ssize_t result,
-initializer_list<int> fds, const string& seat)
+initializer_list<int> fds, const string& seat, bool b_was_occupying)
 {
     if (result <= 0)
     {
-        close_thread("Failed to send message to the client.", fds, seat);
+        close_thread("Failed to send message to the client.", fds, seat, b_was_occupying);
         return -1;
     }
     return 0;
@@ -466,7 +470,7 @@ void Serwer::handle_connections()
         if (poll_result <= 0)
         {
             // Poll failed (we don't expect timeout here).
-            close_thread("Failed to poll.", {socket_fd}, 4);
+            close_thread("Failed to poll.", {socket_fd}, CONNECTIONS_THREAD, false);
             return;
         }
         else
@@ -477,10 +481,10 @@ void Serwer::handle_connections()
                 int client_fd = common::accept_client(socket_fd);
                 if (client_fd < 0) 
                 {
-                    close_thread("Failed to accept connection.", {socket_fd}, 4);
+                    close_thread("Failed to accept connection.", {socket_fd}, CONNECTIONS_THREAD, false);
                 }
 
-                cout << "Accepted connection\n";
+                cout << "Accepted connection; fd: " << client_fd << "\n";
                 thread client_thread(&Serwer::handle_client, this, client_fd);
                 client_thread.detach();
             }
@@ -490,7 +494,7 @@ void Serwer::handle_connections()
             {
                 string server_message;
                 ssize_t pipe_read = common::read_from_pipe(server_write_pipes[4][0], server_message);
-                if (assert_client_read_pipe(pipe_read, {socket_fd}) < 0) { return; }
+                if (assert_client_read_pipe(pipe_read, {socket_fd}, CONNECTIONS_THREAD, false) < 0) { return; }
                 if (server_message == DISCONNECTED)
                 {
                     // Server wants to close the connection.
@@ -542,7 +546,8 @@ int Serwer::reserve_spot(int client_fd, string& seat)
                 string server_message = DISCONNECTED;
                 // Notify the server that all seats are taken.
                 ssize_t socket_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
-                if (assert_client_write_pipe(socket_write, {client_fd}) < 0) {return -1;}
+                if (assert_client_write_pipe(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                cout << "All seats taken\n";
             }
         }
         else
@@ -555,7 +560,7 @@ int Serwer::reserve_spot(int client_fd, string& seat)
             }
             seats_mutex.unlock();
             ssize_t socket_write = senders::send_busy(client_fd, occupied_seats);
-            if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
+            if (assert_client_write_socket(socket_write, {client_fd}, seat, false) < 0) {return -1;}
             else 
             {
                 close_fds({client_fd});
@@ -566,11 +571,11 @@ int Serwer::reserve_spot(int client_fd, string& seat)
     else
     {
         // Invalid message, close the connection.
+        std::cout << "IAM bad message: " << message;
         close_fds("Client send invalid message.", {client_fd});
         return -1;
     }
 
-    close_fds({client_fd});
     return 1;
 }
 
@@ -581,11 +586,13 @@ int Serwer::client_poll(int client_fd, const string& seat)
     ssize_t pipe_write = -1;
     ssize_t socket_write = -1;
     int16_t current_trick = 1;
-    struct pollfd poll_descriptors[2];
+    std::array<struct pollfd, 2> poll_descriptors{};
     poll_descriptors[0].fd = client_fd;
     poll_descriptors[0].events = POLLIN;
     poll_descriptors[1].fd = server_write_pipes[array_mapping[seat]][0];
     poll_descriptors[1].events = POLLIN;
+    
+    cout << poll_descriptors[0].fd << " " << poll_descriptors[1].fd << "\n";
 
     bool b_was_destined_to_play = false;
 
@@ -596,25 +603,25 @@ int Serwer::client_poll(int client_fd, const string& seat)
         poll_descriptors[0].revents = 0;
         poll_descriptors[1].revents = 0;
 
-        int poll_result = poll(&poll_descriptors[0], 2, 5000);
-        if (poll_result == 0)
+        int poll_result = poll(&poll_descriptors[0], 2, -1);
+        if (poll_result == 0 && b_was_destined_to_play)
         { // Timeout.
             socket_write = senders::send_trick(client_fd, current_trick, cards_on_table);
-            if (assert_client_write_socket(socket_write,
-            {client_fd}, seat) < 0) {return -1;}
+            if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
         }
         else if (poll_result < 0)
         {
-            close_thread("Failed to poll.", {client_fd}, seat);
+            close_thread("Failed to poll.", {client_fd}, seat, true);
             return -1;  
         }
         else
         {
-            if (poll_descriptors[0].revents & POLLIN)
+            if (poll_descriptors[0].revents & (POLLHUP | POLLIN))
             { // Client sent a message.
+                cout << "Client " << seat << " sent a message\n";
                 string client_message;
                 socket_read = common::read_from_socket(client_fd, client_message);
-                if (assert_client_read_socket(socket_read, {client_fd}, seat) < 0) {return -1;}
+                if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
                 if (regex::TRICK_client_check(client_message))
                 {
                     cout << "Client " << seat << " played a card\n";
@@ -627,23 +634,22 @@ int Serwer::client_poll(int client_fd, const string& seat)
                         // Notify server that the client played a card.
                         string server_message = "p";
                         pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
-                        if (assert_client_write_pipe(pipe_write, {client_fd}) < 0) {return -1;}
+                        if (assert_client_write_pipe(pipe_write, {client_fd}, seat, true) < 0) {return -1;}
                         b_was_destined_to_play = false;
                     }
                     else
                     {
                         // Client send a message out of order.
                         socket_write = senders::send_wrong(client_fd, current_trick);
-                        if (assert_client_write_socket(socket_write,
-                        {client_fd}, seat) < 0) {return -1;}
+                        if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                     }
                     
                 }
                 else
                 {
                     // Invalid message, close the connection.
-                    close_thread("Client send invalid message.",
-                    {client_fd}, seat);
+                    std::cout << "trick bad message: " << client_message;
+                    close_thread("Client send invalid message.", {client_fd}, seat, true);
                     return -1;
                 }
             }
@@ -652,14 +658,13 @@ int Serwer::client_poll(int client_fd, const string& seat)
             { // Server sent a message.
                 string server_message;
                 pipe_read = common::read_from_pipe(poll_descriptors[1].fd, server_message);
-                if (assert_client_read_pipe(pipe_read, {client_fd}) < 0) {return -1;}
+                if (assert_client_read_pipe(pipe_read, {client_fd}, seat, true) < 0) {return -1;}
 
                 if (server_message == CARD_PLAY)
                 {
                     // Server wants the client to play a card.
                     socket_write = senders::send_trick(client_fd, current_trick, cards_on_table);
-                    if (assert_client_write_socket(socket_write,
-                    {client_fd}, seat) < 0) {return -1;}
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                     b_was_destined_to_play = true;
                 }
                 else if (server_message == DISCONNECTED)
@@ -678,12 +683,12 @@ int Serwer::client_poll(int client_fd, const string& seat)
                     vector<string> cards_on_table_loc{cards_on_table};
                     cards_on_table_mutex.unlock();
                     socket_write = senders::send_taken(client_fd, current_trick, cards_on_table_loc, taker_loc);
-                    if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
 
                     // Barrier response.
                     string barrier_response = BARRIER_RESPONSE;
                     pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], barrier_response.data());
-                    if (assert_client_write_pipe(pipe_write, {client_fd}) < 0) {return -1;}
+                    if (assert_client_write_pipe(pipe_write, {client_fd}, seat, true) < 0) {return -1;}
                 }
                 else if(server_message == SCORES)
                 {
@@ -694,16 +699,17 @@ int Serwer::client_poll(int client_fd, const string& seat)
 
                     // Score.
                     socket_write = senders::send_score(client_fd, round_scores_loc);
-                    if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
 
                     // Total score.
                     socket_write = senders::send_total(client_fd, total_scores_loc);
-                    if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                 }
                 else
                 {
-                    // Server send invalid message.
-                    close_fds("Server send invalid message.", {client_fd});
+                    // Invalid message, close the connection.
+                    std::cout << "Server bad message: " << server_message;
+                    close_thread("Server send invalid message.", {client_fd}, seat, true);
                     return -1;
                 }
             }
@@ -717,6 +723,6 @@ void Serwer::handle_client(int client_fd)
 {
     string seat;
     // Reserve a spot at the table.
-    if (reserve_spot(client_fd, seat) <= 0) {return;}  
+    if (reserve_spot(client_fd, seat) <= 0) { return; }
     client_poll(client_fd, seat);
 }

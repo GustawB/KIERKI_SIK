@@ -74,6 +74,14 @@ ssize_t common::setup_server_socket(int port, int queue_size)
     int server_fd = create_socket();
     if (server_fd == -1) {return -1;}
 
+    int optval = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) {
+        print_error("Failed to set socket options.");
+        close(server_fd);
+        return 1;
+    }
+
+
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;

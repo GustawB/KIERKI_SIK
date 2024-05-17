@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 
     Serwer s(port, timeout, game_file_name);
     s.start_game();
-    s.run_game();
+    //s.run_game();
     return 0;
 }
 
