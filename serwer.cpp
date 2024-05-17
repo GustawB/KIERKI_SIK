@@ -30,7 +30,7 @@ void Serwer::close_thread(const string& error_message,
 initializer_list<int> fds, const string& seat)
 {
     common::print_error(error_message);
-    string server_message = "c";
+    string server_message = DISCONNECTED;
     ssize_t pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
     if (pipe_write != 1) {common::print_error("Failed to notify server.");}
     for (int fd : fds) { close(fd); }
@@ -40,7 +40,7 @@ void Serwer::close_thread(const string& error_message,
 initializer_list<int> fds, int position)
 {
     common::print_error(error_message);
-    string server_message = "c";
+    string server_message = DISCONNECTED;
     ssize_t pipe_write = common::write_to_pipe(server_read_pipes[position][1], server_message.data());
     if (pipe_write != 1) {common::print_error("Failed to notify server.");}
     for (int fd : fds) { close(fd); }
@@ -49,7 +49,7 @@ initializer_list<int> fds, int position)
 int Serwer::assert_client_read_socket(ssize_t result,
 initializer_list<int> fds, const string& seat)
 {
-    string server_message = "c";
+    string server_message = DISCONNECTED;
     if (result == 0)
     {
         // Client disconnected.
@@ -243,53 +243,6 @@ void Serwer::start_game()
     }
 }
 
-int Serwer::handle_disconnections()
-{
-    bool b_there_are_four_players = false;
-    struct pollfd poll_descriptors[5];
-    for (int i = 0; i < 5; ++i)
-    {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-    while (!b_there_are_four_players)
-    {
-        seats_mutex.lock();
-        b_there_are_four_players = (occupied == 4);
-        seats_mutex.unlock();
-        if(!b_there_are_four_players)
-        {
-            int poll_result = poll(poll_descriptors, 5, -1);
-            if (poll_result <= 0)
-            {
-                common::print_error("Failed to poll while waiting for a client.");
-                close_server();
-                return -1;
-            }
-            else
-            {
-                for (int i = 0; i < 5; ++i)
-                {
-                    if (poll_descriptors[i].revents & POLLIN)
-                    {
-                        string wake_msg;
-                        ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], wake_msg);
-                        if (assert_server_read_pipe(pipe_read) < 0) {return -1;}
-                        if (wake_msg == "c" && i == 4)
-                        {
-                            // Connection thread run away.
-                            connection_manager_thread.join();
-                            connection_manager_thread = thread(&Serwer::handle_connections, this);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return 0;
-}
-
 int Serwer::barrier(int16_t type)
 {
     struct pollfd poll_descriptors[5];
@@ -299,6 +252,54 @@ int Serwer::barrier(int16_t type)
         poll_descriptors[i].events = POLLIN;
     }
     
+    int32_t waiting = 0;
+    if (type == MISSING_CLIENT_BARRIER) 
+    {
+        seats_mutex.lock();
+        waiting = 4 - occupied;
+        seats_mutex.unlock();
+    }
+    else if (type == END_OF_TRICK_BARRIER)
+    {
+        barrier_mutex.lock();
+        waiting = waiting_on_barrier;
+        barrier_mutex.unlock();
+    }
+
+    if (waiting == 0) {return 0;}
+    else
+    {
+        // Wait for clients to join.
+        int poll_result = poll(poll_descriptors, 5, -1);
+        if (poll_result <= 0)
+        {
+            common::print_error("Failed to poll while waiting for clients.");
+            close_server();
+            return -1;
+        }
+        else
+        {
+            while (true)
+            {
+                for (int i = 0; i < 5; ++i)
+                {
+                    if (poll_descriptors[i].revents & POLLIN)
+                    {
+                        string wake_msg;
+                        ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], wake_msg);
+                        if (assert_server_read_pipe(pipe_read) < 0) {return -1;}
+                        if (wake_msg == DISCONNECTED && i == 4)
+                        {
+                            // Connection thread run away.
+                            connection_manager_thread.join();
+                            connection_manager_thread = thread(&Serwer::handle_connections, this);
+                        }
+                        else if (wake_msg == BARRIER_RESPONSE) { return 0; }
+                    }
+                }
+            }
+        }
+    }
 }
 
 int Serwer::run_deal(int32_t trick_type, const string& seat)
@@ -317,7 +318,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
     {
         for (int i = 0; i < 4; ++i)
         {
-            string message = "p";
+            string message = CARD_PLAY;
             ssize_t pipe_write = common::write_to_pipe(server_write_pipes[(beginning + i) % 4][1], message.data());
             if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
             bool b_received_card = false;
@@ -340,7 +341,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                             string thread_message;
                             ssize_t pipe_read = common::read_from_pipe(server_read_pipes[j][0], thread_message);
                             if (assert_server_read_pipe(pipe_read) < 0) {return -1;}
-                            if (thread_message == "p" && j == (beginning + i) % 4)
+                            if (thread_message == CARD_PLAY && j == (beginning + i) % 4)
                             {
                                 // Client played a card.
                                 last_played_card_mutex.lock();
@@ -349,7 +350,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                                 last_played_card_mutex.unlock();
                                 b_received_card = true;
                             }
-                            else if (thread_message == "c")
+                            else if (thread_message == DISCONNECTED)
                             {
                                 // Thread run away.
                                 if (j == 4) 
@@ -361,7 +362,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                                 else
                                 {
                                     // Wait for threads.
-                                    if (handle_disconnections() < 0) {return -1;}
+                                    if (barrier(MISSING_CLIENT_BARRIER) < 0) {return -1;}
                                 }
                             }
                             else
@@ -387,10 +388,13 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         taker = result.first;
         for (int i = 0; i < 4; ++i)
         {
-            string message = "t";
+            string message = TAKEN;
             ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
             if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
         }
+
+        // Barrier.
+        if (barrier(END_OF_TRICK_BARRIER) < 0) {return -1;}
     }
 
     // End of the deal.
@@ -400,12 +404,14 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
     scores_mutex.unlock();
     for (int i = 0; i < 4; ++i)
     {
-        string message = "s";
+        string message = SCORES;
         ssize_t pipe_write common::write_to_pipe(server_write_pipes[i][1], message.data());
         if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
     }
 
-    // 
+    // Barrier.
+    if (barrier(END_OF_TRICK_BARRIER) < 0) {return -1;}
+    return 0;
 }
 
 void Serwer::run_game()
@@ -437,7 +443,7 @@ void Serwer::handle_connections()
     // Create a socket.
     int socket_fd = common::setup_server_socket(port, QUEUE_SIZE);
     if (socket_fd < 0) {
-        string server_message = "c";
+        string server_message = DISCONNECTED;
         ssize_t pipe_write = common::write_to_pipe(server_read_pipes[4][1], server_message.data());
         if (pipe_write != 1) {common::print_error("Failed to notify server.");}
         return;
@@ -485,7 +491,7 @@ void Serwer::handle_connections()
                 string server_message;
                 ssize_t pipe_read = common::read_from_pipe(server_write_pipes[4][0], server_message);
                 if (assert_client_read_pipe(pipe_read, {socket_fd}) < 0) { return; }
-                if (server_message == "c")
+                if (server_message == DISCONNECTED)
                 {
                     // Server wants to close the connection.
                     close_fds({socket_fd});
@@ -533,7 +539,7 @@ int Serwer::reserve_spot(int client_fd, string& seat)
             seats_mutex.unlock();
             if (local_occ == 4)
             {
-                string server_message = "c";
+                string server_message = DISCONNECTED;
                 // Notify the server that all seats are taken.
                 ssize_t socket_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
                 if (assert_client_write_pipe(socket_write, {client_fd}) < 0) {return -1;}
@@ -648,7 +654,7 @@ int Serwer::client_poll(int client_fd, const string& seat)
                 pipe_read = common::read_from_pipe(poll_descriptors[1].fd, server_message);
                 if (assert_client_read_pipe(pipe_read, {client_fd}) < 0) {return -1;}
 
-                if (server_message == "p")
+                if (server_message == CARD_PLAY)
                 {
                     // Server wants the client to play a card.
                     socket_write = senders::send_trick(client_fd, current_trick, cards_on_table);
@@ -656,13 +662,13 @@ int Serwer::client_poll(int client_fd, const string& seat)
                     {client_fd}, seat) < 0) {return -1;}
                     b_was_destined_to_play = true;
                 }
-                else if (server_message == "c")
+                else if (server_message == DISCONNECTED)
                 {
                     // Server wants the client to disconnect.
                     close_fds({client_fd});
                     return 0;
                 }
-                else if (server_message == "t")
+                else if (server_message == TAKEN)
                 {
                     // Server wants the client to send "TAKEN".
                     last_taker_mutex.lock();
@@ -675,9 +681,11 @@ int Serwer::client_poll(int client_fd, const string& seat)
                     if (assert_client_write_socket(socket_write, {client_fd}, seat) < 0) {return -1;}
 
                     // Barrier response.
-                    string barrier_response = "r"
+                    string barrier_response = BARRIER_RESPONSE;
+                    pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], barrier_response.data());
+                    if (assert_client_write_pipe(pipe_write, {client_fd}) < 0) {return -1;}
                 }
-                else if(server_message == "s")
+                else if(server_message == SCORES)
                 {
                     scores_mutex.lock();
                     array<int32_t, 4> round_scores_loc{round_scores};
