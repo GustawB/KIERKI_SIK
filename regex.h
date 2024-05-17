@@ -1,6 +1,9 @@
 #ifndef REGEX_H
 #define REGEX_H
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 #include <boost/regex.hpp>
 #include <iostream>
 #include <string>
@@ -25,5 +28,7 @@ namespace regex
     string extract_trick_nr(const string& s);
     vector<string> extract_seat_score(const string& s);
 } // namespace regex
+
+#pragma GCC diagnostic pop
 
 #endif // REGEX_H
