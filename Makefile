@@ -13,7 +13,7 @@ all: $(TARGET1) $(TARGET2)
 $(TARGET1): $(TARGET1).o common.o regex.o cmd_args_parsers.o senders.o retrievers.o serwer.o points_calculator.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LFLAGS)
 
-$(TARGET2): $(TARGET2).o common.o regex.o cmd_args_parsers.o senders.o retrievers.o klient.o
+$(TARGET2): $(TARGET2).o common.o regex.o cmd_args_parsers.o senders.o retrievers.o klient.o klient_printer.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LFLAGS)
 
 common.o: common.cpp common.h
@@ -40,10 +40,13 @@ serwer.o: serwer.cpp serwer.h common.h regex.h senders.h retrievers.h points_cal
 klient.o: klient.cpp klient.h common.h regex.h senders.h retrievers.h
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) -c $< -o $@
 
+klient_printer.o: klient_printer.cpp klient_printer.h
+	$(CC) $(CFLAGS) -I$(BOOST_ROOT) -c $< -o $@
+
 $(TARGET1).o: $(TARGET1).cpp common.h regex.h serwer.h cmd_args_parsers.h senders.h retrievers.h 
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) $(LFLAGS) -c $< -o $@
 
-$(TARGET2).o: $(TARGET2).cpp common.h regex.h klient.h cmd_args_parsers.h senders.h retrievers.h
+$(TARGET2).o: $(TARGET2).cpp common.h regex.h klient.h cmd_args_parsers.h senders.h retrievers.h klient_printer.h
 	$(CC) $(CFLAGS) -I$(BOOST_ROOT) $(LFLAGS) -c $< -o $@
 
 clean:

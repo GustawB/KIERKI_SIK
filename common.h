@@ -20,6 +20,7 @@
 #define SCORES "s"
 #define TAKEN "t"
 #define SERVER_DISCONNECT "d"
+#define NORMAL_END "n"
 
 namespace common 
 {
