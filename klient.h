@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <vector>
+#include <queue>
 #include <mutex>
 #include <array>
 #include <cstring>
@@ -16,96 +17,44 @@
 
 #include "common.h"
 #include "regex.h"
+#include "senders.h"
 
-namespace klient
+using std::string;
+using std::thread;
+using std::vector;
+using std::queue;
+using std::mutex;
+using std::cerr;
+using std::cout;
+
+class Klient
 {
-    using std::string;
-    using std::cerr;
-    using std::cout;
+public:
+    Klient() = delete;
+    Klient(const string& host, int port, int ip, const string& seat_name, bool AI);
+    ~Klient() = default;
 
-    class Klient
-    {
-    public:
-        Klient() = delete;
-        Klient(const string& host, int port, int ip, const string& seat_name, bool AI);
-        ~Klient();
+    void connect_to_serwer();
 
-        void connect_to_serwer();
+private:
+    struct sockaddr_in get_server_address(char const *host, uint16_t port);
 
-        struct sockaddr_in get_server_address(char const *host, uint16_t port);
+    void handle_client();
 
-        string host_name;
-        int port_number;
-        int ip_version;
-        string seat;
-        bool is_ai;
-    };
+    thread interaction_thread;
 
-    inline Klient::Klient(const string& host, int port, int ip, const string& seat_name, bool AI)
-        : host_name(host), port_number(port), ip_version(ip), seat(seat_name), is_ai(AI) {}
+    int client_read_pipe[2];
+    int client_write_pipe[2];
 
-    inline Klient::~Klient() {}
+    queue<string> messages_to_send;
+    int16_t trick_number;
+    mutex messages_to_send_mutex;
 
-    inline struct sockaddr_in Klient::get_server_address(char const *host, uint16_t port)
-    {
-        struct addrinfo hints;
-        memset(&hints, 0, sizeof(struct addrinfo));
-        hints.ai_family = AF_INET; // IPv4
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-
-        struct addrinfo *address_result;
-        int errcode = getaddrinfo(host, NULL, &hints, &address_result);
-        if (errcode != 0)
-        {
-            cout << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-        }
-
-        struct sockaddr_in send_address;
-        send_address.sin_family = AF_INET;   // IPv4
-        send_address.sin_addr.s_addr =       // IP address
-                ((struct sockaddr_in *) (address_result->ai_addr))->sin_addr.s_addr;
-        send_address.sin_port = htons(port); // port from the command line
-
-        freeaddrinfo(address_result);
-
-        return send_address;
-    }
-    
-    inline void Klient::connect_to_serwer()
-    {
-        struct sockaddr_in server_address = get_server_address(host_name.c_str(), port_number);
-
-        // Create a socket.
-        int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (socket_fd < 0)
-        {
-            cout << "Failed to create socket\n";
-            exit(1);
-        }
-
-        // Connect to the server.
-        if (connect(socket_fd, (struct sockaddr *) &server_address,
-                    (socklen_t) sizeof(server_address)) < 0)
-        {
-            cout << "Failed to connect to server\n";
-            exit(1);
-        }
-
-        cout << "Connected to server\n";
-
-        string message = "IAM" + seat + "\r\n";
-
-        // Send the seat name to the server.
-        common::write_to_socket(socket_fd, message.data(), message.size());
-
-        sleep(5);
-
-        close(socket_fd);
-        cout << "Connection closed\n";
-    }
-
-
-} // namespace klient
+    string host_name;
+    int port_number;
+    int ip_version;
+    string seat;
+    bool is_ai;
+};
 
 #endif // KLIENT_H

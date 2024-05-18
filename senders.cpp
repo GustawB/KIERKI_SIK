@@ -20,9 +20,9 @@ ssize_t senders::send_deal(int socket_fd, int16_t deal_type, const string& start
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
 
-ssize_t senders::send_trick(int socket_fd, int16_t trick_type, const vector<string>& cards)
+ssize_t senders::send_trick(int socket_fd, int16_t trick_number, const vector<string>& cards)
 {
-    string message = "TRICK " + std::to_string(trick_type);
+    string message = "TRICK " + std::to_string(trick_number);
     for (const string& card : cards) { message += card; }
     message += DELIMETER;
     return common::write_to_socket(socket_fd, message.data(), message.length());
