@@ -7,7 +7,19 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-#define MAX_MESSAGE_SIZE 
+#define QUEUE_SIZE 69
+
+#define MISSING_CLIENT_BARRIER 0
+#define END_OF_TRICK_BARRIER 1
+
+#define CONNECTIONS_THREAD "K"
+
+#define DISCONNECTED "c"
+#define CARD_PLAY "p"
+#define BARRIER_RESPONSE "b"
+#define SCORES "s"
+#define TAKEN "t"
+#define SERVER_DISCONNECT "d"
 
 namespace common 
 {

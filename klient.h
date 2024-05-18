@@ -14,6 +14,7 @@
 #include <string>
 #include <netdb.h>
 #include <cinttypes>
+#include <poll.h>
 
 #include "common.h"
 #include "regex.h"
@@ -26,6 +27,7 @@ using std::queue;
 using std::mutex;
 using std::cerr;
 using std::cout;
+using std::cin;
 
 class Klient
 {
@@ -39,6 +41,12 @@ public:
 private:
     struct sockaddr_in get_server_address(char const *host, uint16_t port);
 
+    int assert_client_read_socket(ssize_t result, int socket_fd);
+    int assert_client_write_socket(ssize_t result, int socket_fd);
+
+    int assert_client_read_pipe(ssize_t result, int socket_fd);
+    int assert_client_write_pipe(ssize_t result, int socket_fd);
+
     void handle_client();
 
     thread interaction_thread;
@@ -48,7 +56,8 @@ private:
 
     queue<string> messages_to_send;
     int16_t trick_number;
-    mutex messages_to_send_mutex;
+    mutex messages_mutex;
+    mutex ui_mutex;
 
     string host_name;
     int port_number;

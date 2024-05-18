@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
     // Why tf this isn't compiling?
     parser::parse_client_args(argc, argv, host_name, port, ip_version, seat, AI);
 
-    klient::Klient klient(host_name, port, ip_version, seat, AI);
+    Klient klient(host_name, port, ip_version, seat, AI);
     klient.connect_to_serwer();
 
     return 0;
