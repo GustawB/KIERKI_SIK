@@ -214,7 +214,11 @@ void Klient::handle_client(int socket_fd)
                 ssize_t socket_result = common::read_from_socket(socket_fd, message);
                 if (assert_client_read_socket(socket_result, socket_fd) < 0) { return; }
 
-                if(regex::DEAL_check(message))
+                if (regex::BUSY_check)
+                {
+                    
+                }
+                else if(regex::DEAL_check(message))
                 {
                     ++trick_number;
                     if (trick < 10) { message = message.substr(6, message.size() - 8); }
