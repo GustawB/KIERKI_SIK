@@ -198,6 +198,66 @@ void Serwer::close_server()
     close(server_write_pipes[4][1]);
 }
 
+int Serwer::barrier(int16_t type)
+{
+    int32_t waiting = 0;
+    seats_mutex.lock();
+    if (type == MISSING_CLIENT_BARRIER) { waiting = 4 - occupied; }
+    else if (type == END_OF_TRICK_BARRIER) { waiting = waiting_on_barrier; }
+    seats_mutex.unlock();
+
+    struct pollfd poll_descriptors[5];
+    for (int i = 0; i < 5; ++i)
+    {
+        poll_descriptors[i].fd = server_read_pipes[i][0];
+        poll_descriptors[i].events = POLLIN;
+    }
+
+    while(waiting > 0)
+    {
+        for (int i = 0; i < 5; ++i) {poll_descriptors[i].revents = 0;}
+        // Wait for clients to join.
+        int poll_result = poll(&poll_descriptors[0], 5, -1);
+        if (poll_result <= 0)
+        {
+            common::print_error("Failed to poll while waiting for clients.");
+            close_server();
+            return -1;
+        }
+        else
+        {
+            for (int i = 0; i < 5; ++i)
+            {
+                if (poll_descriptors[i].revents & POLLIN)
+                {
+                    string wake_msg;
+                    ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], wake_msg);
+                    if (assert_server_read_pipe(pipe_read) <= 0) {return -1;}
+                    if (wake_msg == DISCONNECTED && i == 4)
+                    {
+                        // Connection thread run away.
+                        connection_manager_thread.join();
+                        connection_manager_thread = thread(&Serwer::handle_connections, this);
+                    }
+                    else if (wake_msg != BARRIER_RESPONSE && wake_msg != DISCONNECTED) 
+                    {
+                        // Invalid message.
+                        common::print_error("Invalid message in barrier poll.");
+                        close_server();
+                        return -1;
+                    }
+                }
+            }
+        }
+        seats_mutex.lock();
+        if (type == MISSING_CLIENT_BARRIER) { waiting = 4 - occupied; }
+        else if (type == END_OF_TRICK_BARRIER) { waiting = waiting_on_barrier; }
+        seats_mutex.unlock();
+    }
+
+    return 0;
+}
+
 void Serwer::start_game()
 {
     cout << "Starting the game\n";
@@ -211,100 +271,11 @@ void Serwer::start_game()
         }
     }
 
-    cout << "Pipes created\n";
-
-    struct pollfd poll_descriptors[5];
-    for (int i = 0; i < 5; ++i)
-    {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-
-    cout << "Poll descriptors created\n";
-
     connection_manager_thread = thread(&Serwer::handle_connections, this);
-    
-    int poll_result = poll(poll_descriptors, 5, -1);
-    if (poll_result <= 0)
-    {
-        // Ahh, finally. GARBAGE.
-        common::print_error("Failed to poll on server start.");
-        close_server();
-        return;
-    }
-    else
-    {
-        for (int i = 0; i < 5; ++i)
-        {
-            if (poll_descriptors[i].revents & POLLIN)
-            {
-                string wake_msg;
-                ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], wake_msg);
-                if (assert_server_read_pipe(pipe_read) < 0) {return;}
-                cout << "Server woken up by " << i << " thread\n";
-            }
-        }
-    }
+
+    barrier(MISSING_CLIENT_BARRIER);
 }
 
-int Serwer::barrier(int16_t type)
-{
-    struct pollfd poll_descriptors[5];
-    for (int i = 0; i < 5; ++i)
-    {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-    
-    int32_t waiting = 0;
-    if (type == MISSING_CLIENT_BARRIER) 
-    {
-        seats_mutex.lock();
-        waiting = 4 - occupied;
-        seats_mutex.unlock();
-    }
-    else if (type == END_OF_TRICK_BARRIER)
-    {
-        barrier_mutex.lock();
-        waiting = waiting_on_barrier;
-        barrier_mutex.unlock();
-    }
-
-    if (waiting == 0) {return 0;}
-    else
-    {
-        // Wait for clients to join.
-        int poll_result = poll(poll_descriptors, 5, -1);
-        if (poll_result <= 0)
-        {
-            common::print_error("Failed to poll while waiting for clients.");
-            close_server();
-            return -1;
-        }
-        else
-        {
-            while (true)
-            {
-                for (int i = 0; i < 5; ++i)
-                {
-                    if (poll_descriptors[i].revents & POLLIN)
-                    {
-                        string wake_msg;
-                        ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], wake_msg);
-                        if (assert_server_read_pipe(pipe_read) < 0) {return -1;}
-                        if (wake_msg == DISCONNECTED && i == 4)
-                        {
-                            // Connection thread run away.
-                            connection_manager_thread.join();
-                            connection_manager_thread = thread(&Serwer::handle_connections, this);
-                        }
-                        else if (wake_msg == BARRIER_RESPONSE) { return 0; }
-                    }
-                }
-            }
-        }
-    }
-}
 
 int Serwer::run_deal(int32_t trick_type, const string& seat)
 {
@@ -439,6 +410,7 @@ void Serwer::run_game()
         cards_mutex.unlock();
         if (run_deal(trick_type, seat) < 0) {return;}
     }
+    cout << "Game ended\n";
     close_server();
 }
 
@@ -543,7 +515,7 @@ int Serwer::reserve_spot(int client_fd, string& seat)
             seats_mutex.unlock();
             if (local_occ == 4)
             {
-                string server_message = DISCONNECTED;
+                string server_message = "b";
                 // Notify the server that all seats are taken.
                 ssize_t socket_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
                 if (assert_client_write_pipe(socket_write, {client_fd}, seat, true) < 0) {return -1;}

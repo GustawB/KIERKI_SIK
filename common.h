@@ -20,7 +20,7 @@ namespace common
     ssize_t read_from_socket(int socket_fd, string& buffer);
     ssize_t read_from_pipe(int pipe_fd, string& buffer);
     ssize_t write_to_socket(int socket_fd, char* buffer, size_t buffer_length);
-    ssize_t write_to_pipe(int pipe_fd, char* buffer);
+    ssize_t write_to_pipe(int pipe_fd, const string& buffer);
     ssize_t create_socket();
     ssize_t setup_server_socket(int port, int queue_size);
     ssize_t accept_client(int socket_fd);
