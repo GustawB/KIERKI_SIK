@@ -3,7 +3,7 @@
 Klient::Klient(const string& host, int port, int ip, const string& seat_name, bool AI)
     : host_name(host), port_number(port), ip_version(ip), seat(seat_name), is_ai(AI), trick_number{0} {}
 
-struct sockaddr_in Klient::get_server_address(char const *host, uint16_t port)
+void Klient::get_server_address(char const *host, uint16_t port)
 {
     struct addrinfo hints;
     memset(&hints, 0, sizeof(struct addrinfo));
@@ -18,15 +18,12 @@ struct sockaddr_in Klient::get_server_address(char const *host, uint16_t port)
         cout << "getaddrinfo: " << gai_strerror(errcode) << "\n";
     }
 
-    struct sockaddr_in send_address;
-    send_address.sin_family = AF_INET;   // IPv4
-    send_address.sin_addr.s_addr =       // IP address
+    server_address.sin_family = AF_INET;   // IPv4
+    server_address.sin_addr.s_addr =       // IP address
             ((struct sockaddr_in *) (address_result->ai_addr))->sin_addr.s_addr;
-    send_address.sin_port = htons(port); // port from the command line
+    server_address.sin_port = htons(port); // port from the command line
 
     freeaddrinfo(address_result);
-
-    return send_address;
 }
 
 void Klient::close_worker_sockets(int socket_fd)
@@ -135,7 +132,7 @@ int Klient::assert_client_write_socket(ssize_t result, int socket_fd, bool is_ma
 
 int Klient::prepare_client()
 {
-    struct sockaddr_in server_address = get_server_address(host_name.c_str(), port_number);
+    get_server_address(host_name.c_str(), port_number);
 
     // Create a socket.
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -323,12 +320,21 @@ void Klient::handle_client(int socket_fd)
                 string message;
                 ssize_t socket_result = common::read_from_socket(socket_fd, message);
                 if (assert_client_read_socket(socket_result, socket_fd) < 0) { return; }
+                if (is_ai)
+                {
+                    printing_mutex.lock();
+                    common::print_log(host_name, port_number, server_address, message);
+                    printing_mutex.unlock();
+                }
 
                 if (regex::BUSY_check())
                 {
-                    printing_mutex.lock();
-                    client_printer::print_busy(message);
-                    printing_mutex.unlock();
+                    if (!is_ai)
+                    {
+                        printing_mutex.lock();
+                        client_printer::print_busy(message);
+                        printing_mutex.unlock();
+                    }
 
                     // End game.
                     close_worker(socket_fd, "", NORMAL_END);
@@ -341,19 +347,22 @@ void Klient::handle_client(int socket_fd)
                     got_score = false;
                     got_total = false;
                     my_cards = cards;
-                    client_printer::print_deal(message);
+                    if (!is_ai) { client_printer::print_deal(message); }
                     printing_mutex.unlock();
                 }
                 else if (regex::WRONG_check(message))
                 {
-                    printing_mutex.lock();
-                    client_printer::print_wrong(trick_number);
-                    printing_mutex.unlock();
+                    if (!is_ai)
+                    {
+                        printing_mutex.lock();
+                        client_printer::print_wrong(trick_number);
+                        printing_mutex.unlock();
+                    }
                 }
                 else if (regex::TAKEN_check(message))
                 {
                     printing_mutex.lock();
-                    client_printer::print_taken(message);
+                    if (!is_ai) { client_printer::print_taken(message); }
                     if (message[message.size() - 1] == seat[0])
                     {
                         string cards;
@@ -367,21 +376,21 @@ void Klient::handle_client(int socket_fd)
                 {
                     printing_mutex.lock();
                     got_score = true;
-                    client_printer::print_score(message);
+                    if (!is_ai) { client_printer::print_score(message); }
                     printing_mutex.unlock();
                 }
                 else if (regex::TOTAL_check(message))
                 {
                     printing_mutex.lock();
                     got_total = true;
-                    client_printer::print_total(message);
+                    if (!is_ai) { client_printer::print_total(message); }
                     printing_mutex.unlock();
                 }
                 else if (regex::TRICK_check(message))
                 {
                     printing_mutex.lock();
                     ++trick_number;
-                    client_printer::print_trick(message, trick_number, my_cards);
+                    if (!is_ai) { client_printer::print_trick(message, trick_number, my_cards); }
                     printing_mutex.unlock();
                 }
                 // else: ignore messages.

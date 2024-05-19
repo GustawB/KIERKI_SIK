@@ -50,7 +50,7 @@ private:
     void handle_connections();
     int reserve_spot(int client_fd, string& seat);
     int client_poll(int client_fd, const string& seat);
-    void handle_client(int client_fd);
+    void handle_client(int client_fd, struct sockaddr_in& client_addr);
     void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
     void close_fds(initializer_list<int> fds);
@@ -66,6 +66,8 @@ private:
     void close_server();
 
     int handle_disconnections();
+
+    struct sockaddr_in server_address;
 
     int port;
     int timeout;

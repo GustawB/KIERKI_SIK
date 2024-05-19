@@ -417,7 +417,7 @@ void Serwer::run_game()
 void Serwer::handle_connections()
 {
     // Create a socket.
-    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE);
+    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE, server_address);
     if (socket_fd < 0) {
         string server_message = DISCONNECTED;
         ssize_t pipe_write = common::write_to_pipe(server_read_pipes[4][1], server_message.data());
@@ -450,14 +450,15 @@ void Serwer::handle_connections()
             // Handle the new connection.
             if (poll_descriptors[0].revents & POLLIN)
             {
-                int client_fd = common::accept_client(socket_fd);
+                struct sockaddr_in client_address;
+                int client_fd = common::accept_client(socket_fd, client_address);
                 if (client_fd < 0) 
                 {
                     close_thread("Failed to accept connection.", {socket_fd}, CONNECTIONS_THREAD, false);
                 }
 
                 cout << "Accepted connection; fd: " << client_fd << "\n";
-                thread client_thread(&Serwer::handle_client, this, client_fd);
+                thread client_thread(&Serwer::handle_client, this, client_fd, client_address);
                 client_thread.detach();
             }
 
@@ -691,7 +692,7 @@ int Serwer::client_poll(int client_fd, const string& seat)
     return 1;
 }
 
-void Serwer::handle_client(int client_fd)
+void Serwer::handle_client(int client_fd, struct sockaddr_in& client_addr)
 {
     string seat;
     // Reserve a spot at the table.

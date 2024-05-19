@@ -57,6 +57,8 @@ private:
     int prepare_client();
     void handle_client();
 
+    struct sockaddr_in server_address;
+
     thread interaction_thread;
 
     int client_read_pipe[2];

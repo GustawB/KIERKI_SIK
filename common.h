@@ -36,10 +36,14 @@ namespace common
     ssize_t write_to_socket(int socket_fd, char* buffer, size_t buffer_length);
     ssize_t write_to_pipe(int pipe_fd, const string& buffer);
     ssize_t create_socket();
-    ssize_t setup_server_socket(int port, int queue_size);
+    ssize_t setup_server_socket(int port, int queue_size, struct sockaddr_in& server_addr);
     ssize_t accept_client(int socket_fd);
 
     void print_error(const string& error_message);
+
+    void print_log(struct sockaddr_in& source_addr, struct sockaddr_in dest_addr, const string& message);
+    void print_log(string host, string port, struct sockaddr_in dest_addr, const string& message);
+    void print_log(struct sockaddr_in source_addr, string host, string port, const string& message);
 } // namespace common
 
 #endif // COMMON_H

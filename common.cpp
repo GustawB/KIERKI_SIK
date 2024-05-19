@@ -1,4 +1,9 @@
 #include <exception>
+#include <chrono>
+#include <format>
+#include <iomanip>
+#include <sstream>
+#include <arpa/inet.h>
 
 #include "common.h"
 
@@ -71,7 +76,7 @@ ssize_t common::create_socket()
     return socket_fd;
 }
 
-ssize_t common::setup_server_socket(int port, int queue_size)
+ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in& server_addr)
 {
     int server_fd = create_socket();
     if (server_fd == -1) {return -1;}
@@ -83,8 +88,6 @@ ssize_t common::setup_server_socket(int port, int queue_size)
         return 1;
     }
 
-
-    struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
@@ -110,4 +113,54 @@ ssize_t common::accept_client(int socket_fd)
     socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(socket_fd, (struct sockaddr*)&client_addr, &client_addr_len);
     return client_fd;
+}
+
+void common::print_log(const struct sockaddr_in& source_addr, const struct sockaddr_in& dest_addr, const string& message)
+{
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm now_tm;
+    localtime_r(&now_c, &now_tm);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    std::stringstream ss;
+    ss << std::put_time(&now_tm, "%Y-%m-%dT%H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
+
+    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
+    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
+    cout << ss.str() << "] " << message;
+}
+
+std::string get_time()
+{
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm now_tm;
+    localtime_r(&now_c, &now_tm);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    std::stringstream ss;
+    ss << std::put_time(&now_tm, "%Y-%m-%dT%H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
+    return ss.str();
+}
+
+void common::print_log(const struct sockaddr_in& source_addr, const struct sockaddr_in& dest_addr, const string& message)
+{
+    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
+    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
+    cout << get_time() << "] " << message;
+}
+
+void common::print_log(const string& host, const string& port, const struct sockaddr_in& dest_addr, const string& message)
+{
+    cout << "[" << host << ":" << port;
+    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
+    cout << get_time() << "] " << message;
+}
+
+void common::print_log(const struct sockaddr_in& source_addr, const string& host, const string& port, const string& message)
+{
+    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
+    cout << "," << host << ":" << port << ",";
+    cout << get_time() << "] " << message;
 }
