@@ -40,10 +40,10 @@ public:
     int run_client();
 
 private:
-    struct sockaddr_in get_server_address(char const *host, uint16_t port);
+    void get_server_address(char const *host, uint16_t port);
 
     void close_worker_sockets(int socket_fd);
-    void close_main_sockets(ssize_t result, const string& error_message = "");
+    void close_main_sockets(ssize_t result, const string& error_message);
 
     void close_worker(int socket_fd, const string& error_message, const string& fd_msg);
     void close_main(const string& error_message, const string& fd_msg);
@@ -51,11 +51,11 @@ private:
     int assert_client_read_socket(ssize_t result, int socket_fd);
     int assert_client_write_socket(ssize_t result, int socket_fd);
 
-    int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main = false);
-    int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main = false);
+    int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main);
+    int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main);
 
     int prepare_client();
-    void handle_client();
+    void handle_client(int socket_fd);
 
     struct sockaddr_in server_address;
 
@@ -63,6 +63,12 @@ private:
 
     int client_read_pipe[2];
     int client_write_pipe[2];
+
+    string host_name;
+    int port_number;
+    int ip_version;
+    string seat;
+    bool is_ai;
 
     queue<string> messages_to_send;
     vector<vector<string>> taken_tricks;
@@ -74,12 +80,6 @@ private:
 
     bool got_score;
     bool got_total;
-
-    string host_name;
-    int port_number;
-    int ip_version;
-    string seat;
-    bool is_ai;
 };
 
 #endif // KLIENT_H

@@ -692,9 +692,10 @@ int Serwer::client_poll(int client_fd, const string& seat)
     return 1;
 }
 
-void Serwer::handle_client(int client_fd, struct sockaddr_in& client_addr)
+void Serwer::handle_client(int client_fd, struct sockaddr_in client_addr)
 {
     string seat;
+    common::print_log(client_addr, server_address, "Client connected.");
     // Reserve a spot at the table.
     if (reserve_spot(client_fd, seat) <= 0) { return; }
     client_poll(client_fd, seat);

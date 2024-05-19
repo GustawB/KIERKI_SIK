@@ -107,28 +107,11 @@ ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in
     return server_fd;
 }
 
-ssize_t common::accept_client(int socket_fd)
+ssize_t common::accept_client(int socket_fd, struct sockaddr_in& client_addr)
 {
-    struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(socket_fd, (struct sockaddr*)&client_addr, &client_addr_len);
     return client_fd;
-}
-
-void common::print_log(const struct sockaddr_in& source_addr, const struct sockaddr_in& dest_addr, const string& message)
-{
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    std::tm now_tm;
-    localtime_r(&now_c, &now_tm);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-    std::stringstream ss;
-    ss << std::put_time(&now_tm, "%Y-%m-%dT%H:%M:%S");
-    ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
-
-    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
-    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
-    cout << ss.str() << "] " << message;
 }
 
 std::string get_time()

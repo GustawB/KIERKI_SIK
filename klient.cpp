@@ -1,7 +1,10 @@
 #include "klient.h"
 
 Klient::Klient(const string& host, int port, int ip, const string& seat_name, bool AI)
-    : host_name(host), port_number(port), ip_version(ip), seat(seat_name), is_ai(AI), trick_number{0} {}
+    : host_name{host}, port_number{port}, seat{seat_name}, is_ai{AI}, 
+    messages_to_send{}, taken_tricks{}, trick_number{0},
+    messages_mutex{}, got_score{false}, got_total{false}
+    {}
 
 void Klient::get_server_address(char const *host, uint16_t port)
 {
@@ -34,7 +37,7 @@ void Klient::close_worker_sockets(int socket_fd)
     close(socket_fd);
 }
 
-void Klient::close_main_sockets(ssize_t resultconst string& error_message = "")
+void Klient::close_main_sockets(ssize_t result, const string& error_message = "")
 {
     if (error_message != "") 
     { 
@@ -66,7 +69,7 @@ void Klient::close_worker(int socket_fd, const string& error_message, const stri
 void Klient::close_main(const string& error_message, const string& fd_msg)
 {
     string msg = fd_msg;
-    ssize_t pipe_result;
+    ssize_t pipe_result = 0;
     if (fd_msg != DISCONNECTED) { pipe_result = common::write_to_pipe(client_read_pipe[1], msg);}
     printing_mutex.lock();
     if (fd_msg != ERROR && pipe_result != 1)
@@ -82,8 +85,7 @@ int Klient::assert_client_read_socket(ssize_t result, int socket_fd)
 {
     if (result < 0)
     {
-        if (!is_main) {close_worker(socket_fd, "Failed to read from socket.", DISCONNECTED);}
-        else {close_main("Failed to read from socket.", DISCONNECTED);}
+        close_main("Failed to read from socket.", DISCONNECTED);
         return -1;
     }
     else if (result == 0)
@@ -94,7 +96,7 @@ int Klient::assert_client_read_socket(ssize_t result, int socket_fd)
     return 0;
 }
 
-int Klient::assert_client_write_socket(ssize_t result, int socket_fd, bool is_main = false)
+int Klient::assert_client_write_socket(ssize_t result, int socket_fd)
 {
     if (result != 1)
     {
@@ -121,13 +123,15 @@ int Klient::assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main 
     return 0;
 }
 
-int Klient::assert_client_write_socket(ssize_t result, int socket_fd, bool is_main = false)
+int Klient::assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main = false)
 {
     if (result != 1)
     {
-        close_worker(socket_fd, "Failed to notify client.", DISCONNECTED);
+        if (!is_main) {close_worker(socket_fd, "Failed to write to pipe.", DISCONNECTED);}
+        else {close_main("Failed to write to pipe.", DISCONNECTED);}
         return -1;
     }
+    return 0;
 }
 
 int Klient::prepare_client()
@@ -159,12 +163,13 @@ int Klient::prepare_client()
     }
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
-    return 0;
+    return socket_fd;
 }
 
 int Klient::run_client()
 {
-    if (prepare_client() < 0) { return -1; }
+    int socket_fd = prepare_client();
+    if (socket_fd < 0) { return -1; }
 
     struct pollfd poll_fds[2];
     poll_fds[0].fd = client_read_pipe[0];
@@ -224,7 +229,7 @@ int Klient::run_client()
         { // Worker thread.
             string message;
             ssize_t pipe_result = common::read_from_pipe(client_read_pipe[0], message);
-            if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return; }
+            if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return -1; }
             if (message == SERVER_DISCONNECT || message == DISCONNECTED || message == NORMAL_END)
             {
                 close_main_sockets(pipe_result);
@@ -245,7 +250,7 @@ int Klient::run_client()
         }
         else if (poll_fds[1].revents & POLLERR)
         {
-            close_main(1, "WORKER_POLLERR");
+            close_main_sockets(1, "WORKER_POLLERR");
             return -1;
         }
     }
@@ -323,11 +328,11 @@ void Klient::handle_client(int socket_fd)
                 if (is_ai)
                 {
                     printing_mutex.lock();
-                    common::print_log(host_name, port_number, server_address, message);
+                    common::print_log(host_name, std::to_string(port_number), server_address, message);
                     printing_mutex.unlock();
                 }
 
-                if (regex::BUSY_check())
+                if (regex::BUSY_check(message))
                 {
                     if (!is_ai)
                     {
@@ -342,7 +347,7 @@ void Klient::handle_client(int socket_fd)
                 }
                 else if(regex::DEAL_check(message))
                 {
-                    vector<string> cards = regex::get_cards(message);
+                    vector<string> cards = regex::extract_cards(message);
                     printing_mutex.lock();
                     got_score = false;
                     got_total = false;
