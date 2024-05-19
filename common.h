@@ -22,6 +22,7 @@
 #define SERVER_DISCONNECT "d"
 #define NORMAL_END "n"
 #define ERROR "e"
+#define DEAL "l"
 
 namespace common 
 {

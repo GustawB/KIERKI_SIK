@@ -20,13 +20,19 @@ bool regex::DEAL_check(const std::string& s)
 
 bool regex::TRICK_check(const std::string& s)
 {
-    boost::regex TRICK_regex("TRICK[1-13]([NESW][CDHS]){0-3}\\r\\n");
-    return boost::regex_match(s, TRICK_regex);
+    // Poprawione złożone wyrażenie regularne
+    //boost::regex TRICK_regex("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)(C|D|H|S)){0-3}\\r\\n");
+    boost::regex TRICK_regexa("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){0}\\r\\n");
+    boost::regex TRICK_regexb("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){1}\\r\\n");
+    boost::regex TRICK_regexc("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){2}\\r\\n");
+    boost::regex TRICK_regexd("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){3}\\r\\n");
+
+    return boost::regex_match(s, TRICK_regexa) || boost::regex_match(s, TRICK_regexb) || boost::regex_match(s, TRICK_regexc) || boost::regex_match(s, TRICK_regexd);
 }
 
 bool regex::TRICK_client_check(const std::string& s)
 {
-    boost::regex TRICK_regex("TRICK[1-13]([NESW][CDHS]){0-3}\\r\\n");
+    boost::regex TRICK_regex("TRICK((1[0-3])|[1-9])([2-9]|10|[JQKA][CDHS]){0-3}\\r\\n");
     return boost::regex_match(s, TRICK_regex);
 }
 

@@ -104,6 +104,8 @@ private:
     mutex last_played_card_mutex;
 
     array<vector<string>, 4> cards;
+    int trick_type_global;
+    string start_seat_global;
     mutex cards_mutex;
 
     string last_taker;

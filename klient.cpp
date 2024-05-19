@@ -167,13 +167,14 @@ int Klient::prepare_client()
 
     getsockname(socket_fd, (struct sockaddr *) &client_address, (socklen_t *) sizeof(client_address));
 
-    if (senders::send_iam(socket_fd, seat) < 0)
+    string msg;
+    if (senders::send_iam(socket_fd, seat, msg) < 0)
     {
         common::print_error("Failed to send seat name.");
         close(socket_fd);
         return -1;
     }
-    common::print_log(client_address, server_address, "IAM" + seat);
+    common::print_log(client_address, server_address, msg);
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
     return socket_fd;
@@ -303,8 +304,9 @@ void Klient::handle_client(int socket_fd)
                     messages_to_send.pop();
                     messages_mutex.unlock();
 
-                    ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card});
-                    common::print_log(client_address, server_address, "TRICK" + std::to_string(trick_number) + card);
+                    string msg;
+                    ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card}, msg);
+                    common::print_log(client_address, server_address, msg);
                     if (assert_client_write_socket(send_result, socket_fd) < 0) { return; }
                 }
                 else
@@ -398,6 +400,10 @@ void Klient::handle_client(int socket_fd)
                     printing_mutex.lock();
                     ++trick_number;
                     if (!is_ai) { client_printer::print_trick(message, trick_number, my_cards); }
+                    else
+                    {
+                        // Time to send a card back to the server.
+                    }
                     printing_mutex.unlock();
                 }
                 // else: ignore messages.

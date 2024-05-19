@@ -293,6 +293,17 @@ void Serwer::start_game()
 
 int Serwer::run_deal(int32_t trick_type, const string& seat)
 {
+    cards_mutex.lock();
+    trick_type_global = trick_type;
+    start_seat_global = seat;
+    cards_mutex.unlock();
+    // Send DEAL
+    for (int i = 0; i < 4; ++i)
+    {
+        ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], DEAL);
+        if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
+    }
+
     struct pollfd poll_descriptors[5];
     for (int i = 0; i < 5; ++i)
     {
@@ -414,12 +425,12 @@ void Serwer::run_game()
     while (fr.read_next_deal() > 0) 
     {
         int16_t trick_type = fr.get_trick_type();
-        string seat = fr.get_seat();
+        string starting_seat = fr.get_seat();
         array<string, 4> raw_cards = fr.get_cards();
         cards_mutex.lock();
         for (int i = 0; i < 4; ++i) { cards[i] = regex::extract_cards(raw_cards[i]); }
         cards_mutex.unlock();
-        if (run_deal(trick_type, seat) < 0) {return;}
+        if (run_deal(trick_type, starting_seat) < 0) {return;}
     }
     close_server();
 }
@@ -539,7 +550,7 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in& 
             }
             seats_mutex.unlock();
             string msg;
-            ssize_t socket_write = senders::send_busy(client_fd, occupied_seats, server_address, client_addr, msg);
+            ssize_t socket_write = senders::send_busy(client_fd, occupied_seats, msg);
 
             print_mutex.lock();
             common::print_log(server_address, client_addr, msg);
@@ -668,6 +679,23 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
 
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                     b_was_destined_to_play = true;
+                }
+                else if(server_message == DEAL)
+                {
+                    // Server wants the client to play a deal.
+                    string msg;
+                    cards_mutex.lock();
+                    vector<string> cards_loc{cards[array_mapping[seat]]};
+                    string seat_loc = start_seat_global;
+                    int trick_loc = trick_type_global;
+                    cards_mutex.unlock();
+                    socket_write = senders::send_deal(client_fd, trick_loc, seat_loc, cards_loc, msg);
+
+                    print_mutex.lock();
+                    common::print_log(server_address, client_addr, msg);
+                    print_mutex.unlock();
+
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                 }
                 else if (server_message == DISCONNECTED)
                 {
