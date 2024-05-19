@@ -53,8 +53,7 @@ void Klient::close_main_sockets(ssize_t result, const string& error_message = ""
 
 void Klient::close_worker(int socket_fd, const string& error_message, const string& fd_msg)
 {
-    string msg = fd_msg;
-    ssize_t pipe_result = common::write_to_pipe(client_read_pipe[1], msg);
+    ssize_t pipe_result = common::write_to_pipe(client_read_pipe[1], fd_msg);
     printing_mutex.lock();
     if (pipe_result != 1)
     {
@@ -85,12 +84,17 @@ int Klient::assert_client_read_socket(ssize_t result, int socket_fd)
 {
     if (result < 0)
     {
-        close_main("Failed to read from socket.", DISCONNECTED);
+        close_worker(socket_fd, "Failed to read from socket.", DISCONNECTED);
         return -1;
     }
     else if (result == 0)
     {
-        close_worker(socket_fd, "Server disconnected.", SERVER_DISCONNECT);
+        printing_mutex.lock();
+        bool got_score_loc = got_score;
+        bool got_total_loc = got_total;
+        printing_mutex.unlock();
+        if (got_score_loc && got_total_loc) {close_worker(socket_fd, "", NORMAL_END);}
+        else {close_worker(socket_fd, "Server disconnected.", SERVER_DISCONNECT);}
         return -1;
     }
     return 0;
@@ -100,7 +104,7 @@ int Klient::assert_client_write_socket(ssize_t result, int socket_fd)
 {
     if (result != 1)
     {
-        close_worker(socket_fd, "Failed to send trick.", DISCONNECTED);
+        close_worker(socket_fd, "Failed to send message to server.", DISCONNECTED);
         return -1;
     }
     return 0;
@@ -136,6 +140,12 @@ int Klient::assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main
 
 int Klient::prepare_client()
 {
+    if (pipe(client_read_pipe) < 0 || pipe(client_write_pipe) < 0)
+    {
+        common::print_error("Failed to create pipes.");
+        return -1;
+    }
+
     get_server_address(host_name.c_str(), port_number);
 
     // Create a socket.
@@ -155,12 +165,15 @@ int Klient::prepare_client()
         return -1;
     }
 
+    getsockname(socket_fd, (struct sockaddr *) &client_address, (socklen_t *) sizeof(client_address));
+
     if (senders::send_iam(socket_fd, seat) < 0)
     {
         common::print_error("Failed to send seat name.");
         close(socket_fd);
         return -1;
     }
+    common::print_log(client_address, server_address, "IAM" + seat);
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
     return socket_fd;
@@ -186,7 +199,6 @@ int Klient::run_client()
         int poll_result = 0;
         if (is_ai) { poll_result = poll(poll_fds, 1, -1); }
         else { poll_result = poll(poll_fds, 2, -1); }
-        poll(poll_fds, 1, -1);
         if (poll_result <= 0)
         {
             close_main("Failed to poll in main client.", DISCONNECTED);
@@ -243,11 +255,6 @@ int Klient::run_client()
                 return -1;
             }
         }
-        else if (poll_fds[1].revents & POLLHUP)
-        {
-            close_main_sockets(1, "WORKER_POLLHUP");
-            return -1;
-        }
         else if (poll_fds[1].revents & POLLERR)
         {
             close_main_sockets(1, "WORKER_POLLERR");
@@ -259,7 +266,7 @@ int Klient::run_client()
 void Klient::handle_client(int socket_fd)
 {
     printing_mutex.lock();
-    cout << "Welcome to the trick game!!!\n";
+    //cout << "Welcome to the trick game!!!\n";
     printing_mutex.unlock();
 
     struct pollfd poll_fds[2];
@@ -297,7 +304,8 @@ void Klient::handle_client(int socket_fd)
                     messages_mutex.unlock();
 
                     ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card});
-                    if (send_result < 0) { return; }
+                    common::print_log(client_address, server_address, "TRICK" + std::to_string(trick_number) + card);
+                    if (assert_client_write_socket(send_result, socket_fd) < 0) { return; }
                 }
                 else
                 {
@@ -306,12 +314,6 @@ void Klient::handle_client(int socket_fd)
                     return;
                 }
             
-            }
-            else if (poll_fds[0].revents & POLLHUP)
-            {
-                // Client disconnected.
-                close_worker(socket_fd, "POLLHUP", DISCONNECTED);
-                return;
             }
             else if (poll_fds[0].revents & POLLERR)
             {
@@ -328,7 +330,7 @@ void Klient::handle_client(int socket_fd)
                 if (is_ai)
                 {
                     printing_mutex.lock();
-                    common::print_log(host_name, std::to_string(port_number), server_address, message);
+                    common::print_log(server_address, client_address, message);
                     printing_mutex.unlock();
                 }
 
@@ -399,14 +401,6 @@ void Klient::handle_client(int socket_fd)
                     printing_mutex.unlock();
                 }
                 // else: ignore messages.
-            }
-            else if(poll_fds[1].revents & POLLHUP)
-            {
-                printing_mutex.lock();
-                printing_mutex.unlock();
-                if (got_score && got_total) {close_worker(socket_fd, "", NORMAL_END);}
-                else {close_worker(socket_fd, "SERVER POLLHUP", SERVER_DISCONNECT);}
-                return;
             }
             else if(poll_fds[1].revents & POLLERR)
             {

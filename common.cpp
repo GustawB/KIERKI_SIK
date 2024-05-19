@@ -131,7 +131,7 @@ void common::print_log(const struct sockaddr_in& source_addr, const struct socka
 {
     cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
     cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
-    cout << get_time() << "] " << message;
+    cout << get_time() << "] " << message << std::endl;
 }
 
 void common::print_log(const string& host, const string& port, const struct sockaddr_in& dest_addr, const string& message)
@@ -145,5 +145,5 @@ void common::print_log(const struct sockaddr_in& source_addr, const string& host
 {
     cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
     cout << "," << host << ":" << port << ",";
-    cout << get_time() << "] " << message;
+    cout << get_time() << "] " << message << std::endl;
 }

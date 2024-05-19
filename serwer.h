@@ -48,8 +48,8 @@ private:
     int barrier(int16_t type);
 
     void handle_connections();
-    int reserve_spot(int client_fd, string& seat);
-    int client_poll(int client_fd, const string& seat);
+    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in& client_addr);
+    int client_poll(int client_fd, const string& seat, const struct sockaddr_in& client_addr);
 
     void handle_client(int client_fd, struct sockaddr_in client_addr);
 
@@ -65,7 +65,7 @@ private:
     int assert_server_read_pipe(ssize_t result);
     int assert_server_write_pipe(ssize_t result);
 
-    void close_server();
+    void close_server(const string& error_message);
 
     int handle_disconnections();
 
@@ -111,6 +111,8 @@ private:
 
     int32_t waiting_on_barrier;
     mutex barrier_mutex;
+
+    mutex print_mutex;
 };
 
 #endif // SERWER_H
