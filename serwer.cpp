@@ -6,7 +6,7 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     client_threads{}, client_threads_mutex{}, occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_mutex{}, array_mapping{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, current_message_mutex{}, cards_on_table{}, cards_on_table_mutex{}, round_scores{}, total_scores{}, scores_mutex{},
-    last_played_card{}, last_played_card_mutex{}, cards{}, cards_mutex{}, last_taker{}, last_taker_mutex{},
+    cards{}, cards_mutex{}, last_taker{}, last_taker_mutex{},
     waiting_on_barrier{0}, barrier_mutex{}, print_mutex{}
     {}
     
@@ -311,7 +311,6 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         poll_descriptors[i].events = POLLIN;
     }
     array<string, 4> seats = {"N", "E", "S", "W"};
-    array<string, 4> played_this_round = {"", "", "", ""};
     map<string, int32_t> scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}};
     int beginning = array_mapping[seat];
     for (int i = 0; i < 13; ++i)
@@ -343,10 +342,6 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                             if (thread_message == CARD_PLAY && j == (beginning + i) % 4)
                             {
                                 // Client played a card.
-                                last_played_card_mutex.lock();
-                                played_this_round[(beginning + i) % 4] = last_played_card;
-                                cards_on_table.push_back(last_played_card);
-                                last_played_card_mutex.unlock();
                                 b_received_card = true;
                             }
                             else if (thread_message == DISCONNECTED)
@@ -376,14 +371,18 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
             }
         }
 
+        cout << "Got four cards\n";
         // Got four cards.
-        PointsCalculator calculator(played_this_round, seats[beginning], trick_type, i + 1);
+        cards_on_table_mutex.lock();
+        PointsCalculator calculator(cards_on_table, seats[beginning], trick_type, i + 1);
+        cards_on_table_mutex.unlock();
         pair<string, int16_t> result = calculator.calculate_points();
         last_taker_mutex.lock();
         last_taker = result.first;
         last_taker_mutex.unlock();
         scores[result.first] += result.second;
         last_taker = result.first;
+        cout << "Calculated points\n";
         for (int i = 0; i < 4; ++i)
         {
             string message = TAKEN;
@@ -415,7 +414,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
 void Serwer::run_game()
 {
     // Here we should have all 4 clients.
-    file_reader::FileReader fr(game_file_name);
+    FileReader fr(game_file_name);
     cards_on_table_mutex.lock();
     cards_on_table.clear();
     cards_on_table_mutex.unlock();
@@ -580,7 +579,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
     ssize_t socket_read = -1;
     ssize_t pipe_write = -1;
     ssize_t socket_write = -1;
-    int16_t current_trick = 1;
+    int16_t current_trick = 0;
     std::array<struct pollfd, 2> poll_descriptors{};
     poll_descriptors[0].fd = client_fd;
     poll_descriptors[0].events = POLLIN;
@@ -600,7 +599,10 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
         if (poll_result == 0 && b_was_destined_to_play)
         { // Timeout.
             string msg;
-            socket_write = senders::send_trick(client_fd, current_trick, cards_on_table, msg);
+            cards_on_table_mutex.lock();
+            vector<string> cards_on_table_loc{cards_on_table};
+            cards_on_table_mutex.unlock();
+            socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
 
             print_mutex.lock();
             common::print_log(server_address, client_addr, msg);
@@ -624,15 +626,22 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 common::print_log(client_addr, server_address, client_message);
                 print_mutex.unlock();
 
+                cards_mutex.lock();
+                int trick_type = trick_type_global;
+                cards_mutex.unlock();
+
                 if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
-                if (regex::TRICK_client_check(client_message))
+                if (regex::TRICK_client_check(client_message, current_trick))
                 {
+                    cout << "asasasdasda\n";
                     if (b_was_destined_to_play)
                     {
                         // Set current message;
-                        current_message_mutex.lock();
-                        current_message = client_message;
-                        current_message_mutex.unlock();
+                        cards_on_table_mutex.lock();
+                        if (trick_type < 10) {client_message = client_message.substr(6, client_message.size() - 8);}
+                        else {client_message = client_message.substr(7, client_message.size() - 9);}
+                        cards_on_table.push_back(client_message);
+                        cards_on_table_mutex.unlock();
                         // Notify server that the client played a card.
                         string server_message = "p";
                         pipe_write = common::write_to_pipe(server_read_pipes[array_mapping[seat]][1], server_message.data());
@@ -671,7 +680,10 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 {
                     // Server wants the client to play a card.
                     string msg;
-                    socket_write = senders::send_trick(client_fd, current_trick, cards_on_table, msg);
+                    cards_on_table_mutex.lock();
+                    vector<string> cards_on_table_loc{cards_on_table};
+                    cards_on_table_mutex.unlock();
+                    socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
 
                     print_mutex.lock();
                     common::print_log(server_address, client_addr, msg);
@@ -684,6 +696,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 {
                     // Server wants the client to play a deal.
                     string msg;
+                    ++current_trick;
                     cards_mutex.lock();
                     vector<string> cards_loc{cards[array_mapping[seat]]};
                     string seat_loc = start_seat_global;

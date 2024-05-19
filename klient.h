@@ -49,13 +49,15 @@ private:
     void close_main(const string& error_message, const string& fd_msg);
 
     int assert_client_read_socket(ssize_t result, int socket_fd);
-    int assert_client_write_socket(ssize_t result, int socket_fd);
+    int assert_client_write_socket(ssize_t result, ssize_t expected, int socket_fd);
 
     int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main);
     int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main);
 
     int prepare_client();
     void handle_client(int socket_fd);
+
+    string strategy(const string& color);
 
     struct sockaddr_in server_address;
     struct sockaddr_in client_address;
@@ -73,10 +75,10 @@ private:
 
     queue<string> messages_to_send;
     vector<vector<string>> taken_tricks;
-    int16_t trick_number;
     mutex messages_mutex;
 
     vector<string> my_cards;
+    int16_t trick_number;
     mutex printing_mutex;
 
     bool got_score;

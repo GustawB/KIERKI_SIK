@@ -2,12 +2,14 @@
 #define POINTS_CALCULATOR_H
 
 #include <iostream>
+#include <vector>
 #include <array>
 #include <string>
 #include <utility>
 #include <map>
 
 using std::array;
+using std::vector;
 using std::string;
 using std::pair;
 
@@ -15,7 +17,7 @@ class PointsCalculator
 {
 public:
     PointsCalculator() = delete;
-    PointsCalculator(const array<string, 4>& played_cards, const string& starter, int16_t hand, int16_t trick);
+    PointsCalculator(const vector<string>& played_cards, const string& starter, int16_t hand, int16_t trick);
     ~PointsCalculator() = default;
 
     pair<string, int16_t> calculate_points();

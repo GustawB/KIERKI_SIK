@@ -100,9 +100,9 @@ int Klient::assert_client_read_socket(ssize_t result, int socket_fd)
     return 0;
 }
 
-int Klient::assert_client_write_socket(ssize_t result, int socket_fd)
+int Klient::assert_client_write_socket(ssize_t result, ssize_t expected, int socket_fd)
 {
-    if (result != 1)
+    if (result != expected)
     {
         close_worker(socket_fd, "Failed to send message to server.", DISCONNECTED);
         return -1;
@@ -264,12 +264,38 @@ int Klient::run_client()
     }
 }
 
+string Klient::strategy(const string& color)
+{
+    if (my_cards.size() == 0) { cout << "KFXCHGJVFHGJLK:\n"; }
+    if (color == "")
+    {
+        printing_mutex.lock();
+        string result = my_cards[my_cards.size() - 1];
+        my_cards.pop_back();
+        printing_mutex.unlock();
+        return result;
+    }
+
+    printing_mutex.lock();
+    for (auto iter = my_cards.begin(); iter != my_cards.end(); ++iter)
+    {
+        if ((*iter)[iter->size() - 1] == color[0])
+        {
+            string result = (*iter);
+            my_cards.erase(iter);
+            printing_mutex.unlock();
+            return result;
+        }
+    }
+    
+    string result = my_cards[my_cards.size() - 1];
+    my_cards.pop_back();
+    printing_mutex.unlock();
+    return result;
+}
+
 void Klient::handle_client(int socket_fd)
 {
-    printing_mutex.lock();
-    //cout << "Welcome to the trick game!!!\n";
-    printing_mutex.unlock();
-
     struct pollfd poll_fds[2];
     poll_fds[0].fd = client_write_pipe[0];
     poll_fds[0].events = POLLIN;
@@ -307,7 +333,7 @@ void Klient::handle_client(int socket_fd)
                     string msg;
                     ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card}, msg);
                     common::print_log(client_address, server_address, msg);
-                    if (assert_client_write_socket(send_result, socket_fd) < 0) { return; }
+                    if (assert_client_write_socket(send_result, msg.length(), socket_fd) < 0) { return; }
                 }
                 else
                 {
@@ -325,7 +351,7 @@ void Klient::handle_client(int socket_fd)
 
 
             if (poll_fds[1].revents & POLLIN)
-            {
+            { // Message from the server.
                 string message;
                 ssize_t socket_result = common::read_from_socket(socket_fd, message);
                 if (assert_client_read_socket(socket_result, socket_fd) < 0) { return; }
@@ -335,6 +361,10 @@ void Klient::handle_client(int socket_fd)
                     common::print_log(server_address, client_address, message);
                     printing_mutex.unlock();
                 }
+
+                printing_mutex.lock();
+                int16_t trick_loc = trick_number;
+                printing_mutex.unlock();
 
                 if (regex::BUSY_check(message))
                 {
@@ -351,11 +381,11 @@ void Klient::handle_client(int socket_fd)
                 }
                 else if(regex::DEAL_check(message))
                 {
-                    vector<string> cards = regex::extract_cards(message);
                     printing_mutex.lock();
+                    trick_number = 0;
                     got_score = false;
                     got_total = false;
-                    my_cards = cards;
+                    my_cards = regex::extract_cards(std::move(message));
                     if (!is_ai) { client_printer::print_deal(message); }
                     printing_mutex.unlock();
                 }
@@ -395,18 +425,40 @@ void Klient::handle_client(int socket_fd)
                     if (!is_ai) { client_printer::print_total(message); }
                     printing_mutex.unlock();
                 }
-                else if (regex::TRICK_check(message))
+                else if (regex::TRICK_check(message, trick_loc + 1))
                 {
                     printing_mutex.lock();
                     ++trick_number;
-                    if (!is_ai) { client_printer::print_trick(message, trick_number, my_cards); }
+
+                    if (!is_ai) 
+                    {
+                        client_printer::print_trick(message, trick_number, my_cards);
+                        printing_mutex.unlock();
+                    }
                     else
                     {
                         // Time to send a card back to the server.
+                        string color;
+                        printing_mutex.unlock();
+                        if (message.size() <= 9) { color = ""; }
+                        else
+                        {
+                            if (trick_loc < 10) { message = message.substr(6, message.size() - 8); }
+                            else { message = message.substr(7, message.size() - 9); }
+                            string first_card{regex::extract_cards(message)[0]};
+                            color = first_card[first_card.size() - 1];
+                        }
+                        string card_to_play = strategy(color);
+                        string msg;
+                        ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card_to_play}, msg);
+                        printing_mutex.lock();
+                        common::print_log(client_address, server_address, msg);
+                        printing_mutex.unlock();
+                        if (assert_client_write_socket(send_result, msg.length(), socket_fd) < 0) { return; }
                     }
-                    printing_mutex.unlock();
                 }
                 // else: ignore messages.
+                else { cout << "KURWO JEBANA\n";}
             }
             else if(poll_fds[1].revents & POLLERR)
             {

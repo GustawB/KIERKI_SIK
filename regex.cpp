@@ -14,25 +14,19 @@ bool regex::BUSY_check(const std::string& s)
 
 bool regex::DEAL_check(const std::string& s)
 {
-    boost::regex DEAL_regex("DEAL[1-7][NESW]([2-9]|10|[JQKA][CDHS]){13}\\r\\n");
+    boost::regex DEAL_regex("DEAL[1-7][NESW](([2-9]|10|J|Q|K|A)[CDHS]){13}\\r\\n");
     return boost::regex_match(s, DEAL_regex);
 }
-
-bool regex::TRICK_check(const std::string& s)
+  
+bool regex::TRICK_check(const std::string& s, int16_t trick_nr)
 {
-    // Poprawione złożone wyrażenie regularne
-    //boost::regex TRICK_regex("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)(C|D|H|S)){0-3}\\r\\n");
-    boost::regex TRICK_regexa("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){0}\\r\\n");
-    boost::regex TRICK_regexb("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){1}\\r\\n");
-    boost::regex TRICK_regexc("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){2}\\r\\n");
-    boost::regex TRICK_regexd("TRICK(1[0-3]|[1-9])((2-9|10|J|Q|K|A)[CDHS]){3}\\r\\n");
-
-    return boost::regex_match(s, TRICK_regexa) || boost::regex_match(s, TRICK_regexb) || boost::regex_match(s, TRICK_regexc) || boost::regex_match(s, TRICK_regexd);
+    boost::regex TRICK_regex("TRICK" + to_string(trick_nr) + "([2-9|10|J|Q|K|A][CDHS]){0,3}\\r\\n");
+    return regex_match(s, TRICK_regex);
 }
 
-bool regex::TRICK_client_check(const std::string& s)
+bool regex::TRICK_client_check(const std::string& s, int16_t trick_nr)
 {
-    boost::regex TRICK_regex("TRICK((1[0-3])|[1-9])([2-9]|10|[JQKA][CDHS]){0-3}\\r\\n");
+    boost::regex TRICK_regex("TRICK" + to_string(trick_nr) + "[2-9|10|J|Q|K|A][CDHS]\\r\\n");
     return boost::regex_match(s, TRICK_regex);
 }
 
@@ -44,7 +38,7 @@ bool regex::WRONG_check(const std::string& s)
 
 bool regex::TAKEN_check(const std::string& s)
 {
-    boost::regex TAKEN_regex("TAKEN[1-13]([2-9]|10|[JQKA][CDHS]){4}[NESW]\\r\\n");
+    boost::regex TAKEN_regex("TAKEN[1-13]([2-9|10|J|Q|K|A][CDHS]){4}[NESW]\\r\\n");
     return boost::regex_match(s, TAKEN_regex);
 }
 
@@ -62,7 +56,7 @@ bool regex::TOTAL_check(const std::string& s)
 
 std::vector<std::string> regex::extract_cards(const std::string& s)
 {
-    boost::regex card_regex("([2-9]|10|[JQKA][CDHS])");
+    boost::regex card_regex("([2-9]|10|J|Q|K|A)[CDHS]");
     boost::sregex_iterator card_iterator(s.begin(), s.end(), card_regex);
     boost::sregex_iterator end;
     std::vector<std::string> cards;
