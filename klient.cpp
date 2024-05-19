@@ -133,8 +133,7 @@ int Klient::assert_client_write_socket(ssize_t result, int socket_fd, bool is_ma
     }
 }
 
-
-void Klient::connect_to_serwer()
+int Klient::prepare_client()
 {
     struct sockaddr_in server_address = get_server_address(host_name.c_str(), port_number);
 
@@ -143,7 +142,7 @@ void Klient::connect_to_serwer()
     if (socket_fd < 0) 
     {
         common::print_error("Failed to create socket.");
-        return;
+        return -1;
     }
 
     // Connect to the server.
@@ -152,34 +151,46 @@ void Klient::connect_to_serwer()
     {
         common::print_error("Failed to connect to server.");
         close(socket_fd);
-        return;
+        return -1;
     }
 
     if (senders::send_iam(socket_fd, seat) < 0)
     {
         common::print_error("Failed to send seat name.");
         close(socket_fd);
-        return;
+        return -1;
     }
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
+    return 0;
+}
+
+int Klient::run_client()
+{
+    if (prepare_client() < 0) { return -1; }
 
     struct pollfd poll_fds[2];
-    poll_fds[0].fd = STDIN_FILENO;
+    poll_fds[0].fd = client_read_pipe[0];
     poll_fds[0].events = POLLIN;
-    poll_fds[1].fd = client_read_pipe[0];
-    poll_fds[1].events = POLLIN;
+    if (!is_ai) 
+    {
+        poll_fds[1].fd = STDIN_FILENO;
+        poll_fds[1].events = POLLIN;
+    }
     while (true)
     {
         poll_fds[0].revents = 0;
         poll_fds[1].revents = 0;
-        int poll_result = poll(poll_fds, 1, -1);
+        int poll_result = 0;
+        if (is_ai) { poll_result = poll(poll_fds, 1, -1); }
+        else { poll_result = poll(poll_fds, 2, -1); }
+        poll(poll_fds, 1, -1);
         if (poll_result <= 0)
         {
             close_main("Failed to poll in main client.", DISCONNECTED);
-            return;
+            return -1;
         }
-        if (poll_fds[0].revents & POLLIN)
+        if (!is_ai && (poll_fds[1].revents & POLLIN))
         { // Standard stream.
             string message;
             getline(cin, message);
@@ -190,7 +201,7 @@ void Klient::connect_to_serwer()
                 messages_to_send.push(card);
                 messages_mutex.unlock();
                 ssize_t pipe_result = common::write_to_pipe(client_write_pipe[1], CARD_PLAY);
-                if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return; }
+                if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return -1; }
             }
             else if (message == "cards")
             {
@@ -212,7 +223,7 @@ void Klient::connect_to_serwer()
             }
         }
 
-        if (poll_fds[1].revents & POLLIN)
+        if (poll_fds[0].revents & POLLIN)
         { // Worker thread.
             string message;
             ssize_t pipe_result = common::read_from_pipe(client_read_pipe[0], message);
@@ -220,24 +231,25 @@ void Klient::connect_to_serwer()
             if (message == SERVER_DISCONNECT || message == DISCONNECTED || message == NORMAL_END)
             {
                 close_main_sockets(pipe_result);
-                return;
+                if (message == NORMAL_END) { return 0; }
+                else { return -1; }
             }
             else
             {
                 // Some garbage. Kill myself.
                 close_main("Wrong message from worker.", DISCONNECTED);
-                return;
+                return -1;
             }
         }
         else if (poll_fds[1].revents & POLLHUP)
         {
             close_main_sockets(1, "WORKER_POLLHUP");
-            return;
+            return -1;
         }
         else if (poll_fds[1].revents & POLLERR)
         {
             close_main(1, "WORKER_POLLERR");
-            return;
+            return -1;
         }
     }
 }

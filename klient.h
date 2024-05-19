@@ -37,7 +37,7 @@ public:
     Klient(const string& host, int port, int ip, const string& seat_name, bool AI);
     ~Klient() = default;
 
-    void connect_to_serwer();
+    int run_client();
 
 private:
     struct sockaddr_in get_server_address(char const *host, uint16_t port);
@@ -54,6 +54,7 @@ private:
     int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main = false);
     int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main = false);
 
+    int prepare_client();
     void handle_client();
 
     thread interaction_thread;
