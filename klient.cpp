@@ -37,6 +37,20 @@ void Klient::close_worker_sockets(int socket_fd)
     close(socket_fd);
 }
 
+void Klient::close_main_sockets(ssize_t resultconst string& error_message = "")
+{
+    if (error_message != "") 
+    { 
+        printing_mutex.lock();
+        common::print_error(error_message);
+        printing_mutex.unlock(); 
+    }
+    // Close my ends of pipes.
+    if (result == 1) { interaction_thread.join(); }
+    close(client_read_pipe[0]);
+    close(client_write_pipe[1]);
+}
+
 void Klient::close_worker(int socket_fd, const string& error_message, const string& fd_msg)
 {
     string msg = fd_msg;
@@ -55,18 +69,16 @@ void Klient::close_worker(int socket_fd, const string& error_message, const stri
 void Klient::close_main(const string& error_message, const string& fd_msg)
 {
     string msg = fd_msg;
-    ssize_t pipe_result = common::write_to_pipe(client_write_pipe[1], msg);
+    ssize_t pipe_result;
+    if (fd_msg != DISCONNECTED) { pipe_result = common::write_to_pipe(client_read_pipe[1], msg);}
     printing_mutex.lock();
-    if (pipe_result != 1)
+    if (fd_msg != ERROR && pipe_result != 1)
     {
         common::print_error("Failed to notify worker.");
     }
     common::print_error(error_message);
     printing_mutex.unlock();
-    if (pipe_result == 1) {interaction_thread.join();}
-    // Close my ends of pipes.
-    close(client_read_pipe[1]);
-    close(client_write_pipe[0]);
+    close_main_sockets(pipe_result);
 }
 
 int Klient::assert_client_read_socket(ssize_t result, int socket_fd)
@@ -168,7 +180,7 @@ void Klient::connect_to_serwer()
             return;
         }
         if (poll_fds[0].revents & POLLIN)
-        {
+        { // Standard stream.
             string message;
             getline(cin, message);
             if (message.substr(0, 1) == "!")
@@ -183,42 +195,13 @@ void Klient::connect_to_serwer()
             else if (message == "cards")
             {
                 printing_mutex.lock();
-                bool b_is_first = true;
-                for (const string& card : my_cards)
-                {
-                    if (b_is_first)
-                    {
-                        cout << card;
-                        b_is_first = false;
-                    }
-                    else
-                    {
-                        cout << ", " << card;
-                    }
-                }
-                cout << ".\n";
+                client_printer::print_my_cards(my_cards);
                 printing_mutex.unlock();
             }
             else if (message == "tricks")
             {
                 printing_mutex.lock();
-                for (const vector<string>& trick : taken_tricks)
-                {
-                    bool b_is_first = true;
-                    for (const string& card : trick)
-                    {
-                        if (b_is_first)
-                        {
-                            cout << card;
-                            b_is_first = false;
-                        }
-                        else
-                        {
-                            cout << ", " << card;
-                        }
-                    }
-                    cout << "\n";
-                }
+                client_printer::print_my_tricks(taken_tricks);
                 printing_mutex.unlock();
             }
             else
@@ -230,15 +213,31 @@ void Klient::connect_to_serwer()
         }
 
         if (poll_fds[1].revents & POLLIN)
-        {
+        { // Worker thread.
             string message;
             ssize_t pipe_result = common::read_from_pipe(client_read_pipe[0], message);
             if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return; }
-            if (message == DISCONNECTED)
+            if (message == SERVER_DISCONNECT || message == DISCONNECTED || message == NORMAL_END)
             {
-                close_main("", NORMAL_END);
+                close_main_sockets(pipe_result);
                 return;
             }
+            else
+            {
+                // Some garbage. Kill myself.
+                close_main("Wrong message from worker.", DISCONNECTED);
+                return;
+            }
+        }
+        else if (poll_fds[1].revents & POLLHUP)
+        {
+            close_main_sockets(1, "WORKER_POLLHUP");
+            return;
+        }
+        else if (poll_fds[1].revents & POLLERR)
+        {
+            close_main(1, "WORKER_POLLERR");
+            return;
         }
     }
 }
@@ -327,7 +326,8 @@ void Klient::handle_client(int socket_fd)
                 {
                     vector<string> cards = regex::get_cards(message);
                     printing_mutex.lock();
-                    ++trick_number;
+                    got_score = false;
+                    got_total = false;
                     my_cards = cards;
                     client_printer::print_deal(message);
                     printing_mutex.unlock();
@@ -354,18 +354,21 @@ void Klient::handle_client(int socket_fd)
                 else if (regex::SCORE_check(message))
                 {
                     printing_mutex.lock();
+                    got_score = true;
                     client_printer::print_score(message);
                     printing_mutex.unlock();
                 }
                 else if (regex::TOTAL_check(message))
                 {
                     printing_mutex.lock();
+                    got_total = true;
                     client_printer::print_total(message);
                     printing_mutex.unlock();
                 }
                 else if (regex::TRICK_check(message))
                 {
                     printing_mutex.lock();
+                    ++trick_number;
                     client_printer::print_trick(message, trick_number, my_cards);
                     printing_mutex.unlock();
                 }
@@ -374,9 +377,8 @@ void Klient::handle_client(int socket_fd)
             else if(poll_fds[1].revents & POLLHUP)
             {
                 printing_mutex.lock();
-                bool b_is_end = (taken_tricks.size() == 0);
                 printing_mutex.unlock();
-                if (b_is_end) {close_worker(socket_fd, "", NORMAL_END);}
+                if (got_score && got_total) {close_worker(socket_fd, "", NORMAL_END);}
                 else {close_worker(socket_fd, "SERVER POLLHUP", SERVER_DISCONNECT);}
                 return;
             }

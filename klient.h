@@ -43,6 +43,7 @@ private:
     struct sockaddr_in get_server_address(char const *host, uint16_t port);
 
     void close_worker_sockets(int socket_fd);
+    void close_main_sockets(ssize_t result, const string& error_message = "");
 
     void close_worker(int socket_fd, const string& error_message, const string& fd_msg);
     void close_main(const string& error_message, const string& fd_msg);
@@ -67,6 +68,9 @@ private:
 
     vector<string> my_cards;
     mutex printing_mutex;
+
+    bool got_score;
+    bool got_total;
 
     string host_name;
     int port_number;

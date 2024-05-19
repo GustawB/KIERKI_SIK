@@ -124,3 +124,42 @@ void client_printer::print_trick(const std::string& s, int16_t trick_nr, vector<
     }
     cout << "\n";
 }
+
+void client_printer::print_my_cards(const vector<string>& my_cards)
+{
+    bool b_is_first = true;
+    for (const string& card : my_cards)
+    {
+        if (b_is_first)
+        {
+            cout << card;
+            b_is_first = false;
+        }
+        else
+        {
+            cout << ", " << card;
+        }
+    }
+    cout << ".\n";
+}
+
+void client_printer::print_my_tricks(const vector<vector<string>>& taken_tricks)
+{
+    for (const vector<string>& trick : taken_tricks)
+    {
+        bool b_is_first = true;
+        for (const string& card : trick)
+        {
+            if (b_is_first)
+            {
+                cout << card;
+                b_is_first = false;
+            }
+            else
+            {
+                cout << ", " << card;
+            }
+        }
+        cout << "\n";
+    }
+}
