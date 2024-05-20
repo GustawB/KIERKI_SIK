@@ -20,7 +20,7 @@ public:
     PointsCalculator(const vector<string>& played_cards, const string& starter, int16_t hand, int16_t trick);
     ~PointsCalculator() = default;
 
-    pair<string, int16_t> calculate_points();
+    pair<string, int32_t> calculate_points();
 
 private:
     string find_taker();

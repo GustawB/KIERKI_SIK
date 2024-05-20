@@ -56,7 +56,7 @@ bool regex::TOTAL_check(const std::string& s)
 
 std::vector<std::string> regex::extract_cards(const std::string& s)
 {
-    boost::regex card_regex("([2-9]|10|J|Q|K|A)[CDHS]");
+    boost::regex card_regex("([2-9]|1[0]|J|Q|K|A)[CDHS]");
     boost::sregex_iterator card_iterator(s.begin(), s.end(), card_regex);
     boost::sregex_iterator end;
     std::vector<std::string> cards;
@@ -76,7 +76,7 @@ std::string regex::extract_trick_nr(const std::string& s)
 
 std::vector<std::string> regex::extract_seat_score(const std::string& s)
 {
-    boost::regex seat_score_regex("([NESW]\\b\\d+\\b)");
+    boost::regex seat_score_regex("([NESW]d+)");
     boost::sregex_iterator seat_score_iterator(s.begin(), s.end(), seat_score_regex);
     boost::sregex_iterator end;
     std::vector<std::string> seat_scores;

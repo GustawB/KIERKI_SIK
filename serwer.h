@@ -17,7 +17,6 @@
 #include "common.h"
 #include "regex.h"
 #include "senders.h"
-#include "retrievers.h"
 #include "file_reader.h"
 #include "points_calculator.h"
 

@@ -17,16 +17,16 @@ PointsCalculator::PointsCalculator(const vector<string>& played_cards, const str
     }
 }
 
-pair<string, int16_t> PointsCalculator::calculate_points()
+pair<string, int32_t> PointsCalculator::calculate_points()
 {
     string taker = find_taker();
-    if (trick_type == 0) { return no_tricks(taker); }
-    if (trick_type == 1) { return no_hearts(taker); }
-    if (trick_type == 2) { return no_queens(taker); }
-    if (trick_type == 3) { return no_misters(taker); }
-    if (trick_type == 4) { return no_hearts_king(taker); }
-    if (trick_type == 5) { return no_seventh_last_trick(taker); }
-    if (trick_type == 6) { return bandit(taker); }
+    if (trick_type == 1) { return no_tricks(taker); }
+    if (trick_type == 2) { return no_hearts(taker); }
+    if (trick_type == 3) { return no_queens(taker); }
+    if (trick_type == 4) { return no_misters(taker); }
+    if (trick_type == 5) { return no_hearts_king(taker); }
+    if (trick_type == 6) { return no_seventh_last_trick(taker); }
+    if (trick_type == 7) { return bandit(taker); }
     return pair<string, int16_t>{taker, -1};
 }
 

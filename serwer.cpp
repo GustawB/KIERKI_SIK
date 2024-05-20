@@ -376,13 +376,13 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         // Got four cards.
         //sleep(5);
         cards_on_table_mutex.lock();
-        //PointsCalculator calculator(cards_on_table, seats[beginning], trick_type, i + 1);
+        PointsCalculator calculator(cards_on_table, seats[beginning], trick_type, i + 1);
         cards_on_table_mutex.unlock();
-        //pair<string, int16_t> result = calculator.calculate_points();
+        pair<string, int32_t> result = calculator.calculate_points();
         last_taker_mutex.lock();
-        last_taker = "W";
+        last_taker = result.first;
         last_taker_mutex.unlock();
-        scores["W"] += 69; //result.second;
+        scores[result.first] += result.second; //result.second;
         seats_mutex.lock();
         occupied = 0;
         seats_mutex.unlock();
@@ -627,10 +627,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 print_mutex.lock();
                 common::print_log(client_addr, server_address, client_message);
                 print_mutex.unlock();
-
-                cards_mutex.lock();
-                int trick_type = trick_type_global;
-                cards_mutex.unlock();
 
                 if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
                 if (regex::TRICK_client_check(client_message, current_trick))
