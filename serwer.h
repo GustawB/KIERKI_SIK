@@ -45,7 +45,7 @@ public:
 private:
     int run_deal(int32_t trick_type, const string& seat);
 
-    int barrier(int16_t type);
+    int barrier();
 
     void handle_connections();
     int reserve_spot(int client_fd, string& seat, const struct sockaddr_in& client_addr);
@@ -53,7 +53,7 @@ private:
 
     void handle_client(int client_fd, struct sockaddr_in client_addr);
 
-    void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying);
+    void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_ended_by_server);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
     void close_fds(initializer_list<int> fds);
 

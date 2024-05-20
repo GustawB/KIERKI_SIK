@@ -4,6 +4,7 @@ PointsCalculator::PointsCalculator(const vector<string>& played_cards, const str
     : trick_type{trick_type}, trick{trick}, starter{starter}, seats{{ "N", "E", "S", "W" }},
     seats_mapping{{ "N", 0 }, { "E", 1 }, { "S", 2 }, { "W", 3 }}
 {
+    std::cout << "Size: " << played_cards.size() << std::endl;
     for (int i = 0; i < 4; i++)
     {
         colors[i] = played_cards[i].substr(played_cards[i].size() - 1, 1);
