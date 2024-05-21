@@ -69,7 +69,7 @@ std::vector<std::string> regex::extract_cards(const std::string& s)
 
 std::string regex::extract_trick_nr(const std::string& s)
 {
-    boost::regex trick_nr_regex("TRICK([1-9]|1[0-3])");
+    boost::regex trick_nr_regex("TRICK(?:[1-9]|1[0-3])");
     boost::sregex_iterator trick_nr_iterator(s.begin(), s.end(), trick_nr_regex);
     return trick_nr_iterator->str();
 }

@@ -13,6 +13,7 @@
 #include <cinttypes>
 #include <poll.h>
 #include <initializer_list>
+#include <algorithm>
 
 #include "common.h"
 #include "regex.h"
@@ -27,6 +28,7 @@ using std::string;
 using std::vector;
 using std::cout;
 using std::map;
+using std::find;
 using std::initializer_list;
 
 using poll_size = vector<struct pollfd>::size_type;
@@ -70,18 +72,17 @@ private:
 
     struct sockaddr_in server_address;
 
+    mutex memory_mutex;
+    mutex print_mutex;
+
     int port;
     int timeout;
     string game_file_name;
 
     thread connection_manager_thread;
 
-    vector<thread> client_threads;
-    mutex client_threads_mutex;
-
     int occupied;
     map<string, int> seats_status;
-    mutex seats_mutex;
 
     // 0 - read; 1 - write
     array<int[2], 5> server_read_pipes;
@@ -90,27 +91,19 @@ private:
     map<string, int> array_mapping;
 
     string current_message;
-    mutex current_message_mutex;
 
     vector<string> cards_on_table;
-    mutex cards_on_table_mutex;
 
     map<string, int32_t> round_scores;
     map<string, int32_t> total_scores;
-    mutex scores_mutex;
 
     array<vector<string>, 4> cards;
     int trick_type_global;
     string start_seat_global;
-    mutex cards_mutex;
 
     string last_taker;
-    mutex last_taker_mutex;
 
     int32_t waiting_on_barrier;
-    mutex barrier_mutex;
-
-    mutex print_mutex;
 };
 
 #endif // SERWER_H

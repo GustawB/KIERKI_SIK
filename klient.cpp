@@ -385,18 +385,16 @@ void Klient::handle_client(int socket_fd)
                     trick_number = 0;
                     got_score = false;
                     got_total = false;
-                    my_cards = regex::extract_cards(std::move(message));
+                    message = message.substr(6, message.size() - 8);
+                    my_cards = regex::extract_cards(message);
                     if (!is_ai) { client_printer::print_deal(message); }
                     printing_mutex.unlock();
                 }
                 else if (regex::WRONG_check(message))
                 {
-                    if (!is_ai)
-                    {
-                        printing_mutex.lock();
-                        client_printer::print_wrong(trick_number);
-                        printing_mutex.unlock();
-                    }
+                    printing_mutex.lock();
+                    if (!is_ai) { client_printer::print_wrong(trick_number); }
+                    printing_mutex.unlock();
                 }
                 else if (regex::TAKEN_check(message))
                 {
