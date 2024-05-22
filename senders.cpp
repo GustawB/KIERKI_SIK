@@ -28,15 +28,15 @@ ssize_t senders::send_trick(int socket_fd, int16_t trick_number, const vector<st
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
 
-ssize_t senders::send_wrong(int socket_fd, int16_t trick_type, string& message)
+ssize_t senders::send_wrong(int socket_fd, int16_t trick_number, string& message)
 {
-    message = "WRONG" + std::to_string(trick_type) + DELIMETER;
+    message = "WRONG" + std::to_string(trick_number) + DELIMETER;
     return common::write_to_socket(socket_fd, message.data(), message.length());
 }
 
-ssize_t senders::send_taken(int socket_fd, int16_t trick_type, const vector<string>& cards, const string& taking_seat, string& message)
+ssize_t senders::send_taken(int socket_fd, int16_t trick_number, const vector<string>& cards, const string& taking_seat, string& message)
 {
-    message = "TAKEN" + std::to_string(trick_type);
+    message = "TAKEN" + std::to_string(trick_number);
     for (const string& card : cards) { message += card; }
     message += taking_seat + DELIMETER;
     return common::write_to_socket(socket_fd, message.data(), message.length());

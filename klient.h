@@ -15,6 +15,7 @@
 #include <netdb.h>
 #include <cinttypes>
 #include <poll.h>
+#include <algorithm>
 
 #include "common.h"
 #include "regex.h"
@@ -29,6 +30,7 @@ using std::mutex;
 using std::cerr;
 using std::cout;
 using std::cin;
+using std::find;
 
 class Klient
 {
@@ -73,13 +75,14 @@ private:
     string seat;
     bool is_ai;
 
+    mutex memory_mutex;
+    mutex printing_mutex;
+
     queue<string> messages_to_send;
     vector<vector<string>> taken_tricks;
-    mutex messages_mutex;
 
     vector<string> my_cards;
     int16_t trick_number;
-    mutex printing_mutex;
 
     bool got_score;
     bool got_total;

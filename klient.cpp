@@ -1,9 +1,9 @@
 #include "klient.h"
 
 Klient::Klient(const string& host, int port, int ip, const string& seat_name, bool AI)
-    : host_name{host}, port_number{port}, seat{seat_name}, is_ai{AI}, 
-    messages_to_send{}, taken_tricks{}, trick_number{0},
-    messages_mutex{}, got_score{false}, got_total{false}
+    : host_name{host}, port_number{port}, ip_version{ip}, seat{seat_name}, is_ai{AI}, 
+    memory_mutex{}, printing_mutex{}, messages_to_send{}, taken_tricks{}, 
+    trick_number{1}, got_score{false}, got_total{false}
     {}
 
 void Klient::get_server_address(char const *host, uint16_t port)
@@ -212,9 +212,9 @@ int Klient::run_client()
             if (message.substr(0, 1) == "!")
             {
                 string card = message.substr(1, message.size() - 1);
-                messages_mutex.lock();
+                memory_mutex.lock();
                 messages_to_send.push(card);
-                messages_mutex.unlock();
+                memory_mutex.unlock();
                 ssize_t pipe_result = common::write_to_pipe(client_write_pipe[1], CARD_PLAY);
                 if (assert_client_read_pipe(pipe_result, socket_fd, true) < 0) { return -1; }
             }
@@ -266,7 +266,6 @@ int Klient::run_client()
 
 string Klient::strategy(const string& color)
 {
-    if (my_cards.size() == 0) { cout << "KFXCHGJVFHGJLK:\n"; }
     if (color == "")
     {
         printing_mutex.lock();
@@ -301,7 +300,6 @@ void Klient::handle_client(int socket_fd)
     poll_fds[0].events = POLLIN;
     poll_fds[1].fd = socket_fd;
     poll_fds[1].events = POLLIN;
-    bool b_got_server_resp = true;
     while (true)
     {
         int poll_result = poll(poll_fds, 2, -1);
@@ -325,10 +323,10 @@ void Klient::handle_client(int socket_fd)
                 }
                 else if (message == CARD_PLAY)
                 {
-                    messages_mutex.lock();
+                    memory_mutex.lock();
                     string card = messages_to_send.front();
                     messages_to_send.pop();
-                    messages_mutex.unlock();
+                    memory_mutex.unlock();
 
                     string msg;
                     ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card}, msg);
@@ -382,7 +380,7 @@ void Klient::handle_client(int socket_fd)
                 else if(regex::DEAL_check(message))
                 {
                     printing_mutex.lock();
-                    trick_number = 0;
+                    trick_number = 1;
                     got_score = false;
                     got_total = false;
                     message = message.substr(6, message.size() - 8);
@@ -400,13 +398,18 @@ void Klient::handle_client(int socket_fd)
                 {
                     printing_mutex.lock();
                     if (!is_ai) { client_printer::print_taken(message); }
-                    if (message[message.size() - 1] == seat[0])
+                    string cards;
+                    char taker = message[message.size() - 1];
+                    if (trick_number < 10) { cards = message.substr(6, message.size() - 9); }
+                    else { cards = message.substr(7, message.size() - 10); }
+                    vector<string> extracted_cards{regex::extract_cards(cards)};
+                    for (const string& card : extracted_cards) 
                     {
-                        string cards;
-                        if (trick_number < 10) { cards = message.substr(6, message.size() - 9); }
-                        else { cards = message.substr(7, message.size() - 10); }
-                        taken_tricks.push_back(regex::extract_cards(cards));
+                        auto iter = find(my_cards.begin(), my_cards.end(), card);
+                        if (iter != my_cards.end()) { my_cards.erase(iter); }
                     }
+                    if (taker == seat[0]) { taken_tricks.push_back(extracted_cards); }
+                    ++trick_number;
                     printing_mutex.unlock();
                 }
                 else if (regex::SCORE_check(message))
@@ -423,10 +426,9 @@ void Klient::handle_client(int socket_fd)
                     if (!is_ai) { client_printer::print_total(message); }
                     printing_mutex.unlock();
                 }
-                else if (regex::TRICK_check(message, trick_loc + 1))
+                else if (regex::TRICK_check(message, trick_loc))
                 {
                     printing_mutex.lock();
-                    ++trick_number;
 
                     if (!is_ai) 
                     {
@@ -446,7 +448,11 @@ void Klient::handle_client(int socket_fd)
                             string first_card{regex::extract_cards(message)[0]};
                             color = first_card[first_card.size() - 1];
                         }
+                        printing_mutex.lock();
+                        printing_mutex.unlock();
                         string card_to_play = strategy(color);
+                        printing_mutex.lock();
+                        printing_mutex.unlock();
                         string msg;
                         ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card_to_play}, msg);
                         printing_mutex.lock();

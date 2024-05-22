@@ -88,7 +88,7 @@ private:
     array<int[2], 5> server_read_pipes;
     array<int[2], 5> server_write_pipes;
 
-    map<string, int> array_mapping;
+    map<string, int> seats_to_array;
 
     string current_message;
 
@@ -96,14 +96,22 @@ private:
 
     map<string, int32_t> round_scores;
     map<string, int32_t> total_scores;
+    
+    int32_t trick_number;
 
     array<vector<string>, 4> cards;
+    array<vector<string>, 4> deal;
+    vector<vector<string>> taken_tricks;
+    vector<string> taken_takers;
+    string deal_starter;
     int trick_type_global;
     string start_seat_global;
 
     string last_taker;
 
     int32_t waiting_on_barrier;
+
+    int32_t working_threads;
 };
 
 #endif // SERWER_H

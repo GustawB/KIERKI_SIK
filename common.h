@@ -23,6 +23,7 @@
 #define NORMAL_END "n"
 #define ERROR "e"
 #define DEAL "l"
+#define END "f"
 
 namespace common 
 {
