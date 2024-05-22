@@ -202,7 +202,11 @@ int Serwer::close_server(const string& error_message = "")
         }
     }
 
-    if (error_message != "") { print_error(error_message); }
+    if (error_message != "") 
+    {
+        print_error(error_message);
+        b_did_something_fail = true;
+    }
     return b_did_something_fail;
 }
 
@@ -308,7 +312,7 @@ int Serwer::start_game()
 
     connection_manager_thread = thread(&Serwer::handle_connections, this);
 
-    if (barrier() != 0) {return 1;}
+    if (barrier() < 0) {return 1;}
     return 0;
 }
 
@@ -384,8 +388,9 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                                 else
                                 {
                                     // Wait for threads.
-                                    if (barrier() != 0) {return -1;}
-                                    else {b_received_card = true;}
+                                    int result = barrier();
+                                    if (result < 0) {return -1;}
+                                    else if (result > 0) {b_received_card = true;}
                                 }
                             }
                             else
@@ -416,7 +421,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         }
 
         // Barrier.
-        if (barrier() != 0) {return -1;}
+        if (barrier() < 0) {return -1;}
     }
 
     // End of the deal.
@@ -431,7 +436,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
     }
 
-    if (barrier() != 0) {return -1;}
+    if (barrier() < 0) {return -1;}
     return 0;
 }
 
@@ -793,7 +798,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 {
                     // Barrier response.
                     memory_mutex.lock();
-                    cout << "Seat: " << seat << " received barrier response." << std::endl;
                     ++occupied;
                     int local_occ = occupied;
                     memory_mutex.unlock();

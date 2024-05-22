@@ -140,8 +140,15 @@ int Klient::assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main
 
 int Klient::prepare_client()
 {
-    if (pipe(client_read_pipe) < 0 || pipe(client_write_pipe) < 0)
+    if (pipe(client_read_pipe))
     {
+        common::print_error("Failed to create pipes.");
+        return -1;
+    }
+    else if (pipe(client_write_pipe) < 0)
+    {
+        close(client_read_pipe[0]);
+        close(client_read_pipe[1]);
         common::print_error("Failed to create pipes.");
         return -1;
     }

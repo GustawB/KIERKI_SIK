@@ -23,8 +23,8 @@ int main(int argc, char* argv[])
     parser::parse_server_args(argc, argv, port, game_file_name, timeout);
 
     Serwer s(port, timeout, game_file_name);
-    s.start_game();
-    s.run_game();
+    if (s.start_game() == 0) {return s.run_game();}
+    else {return 1;}
     return 0;
 }
 
