@@ -9,6 +9,8 @@
 
 #define QUEUE_SIZE 69
 
+#define MAX_BUFFER_SIZE 90 // for uint64_t max
+
 #define MISSING_CLIENT_BARRIER 0
 #define END_OF_TRICK_BARRIER 1
 
@@ -44,8 +46,6 @@ namespace common
     void print_error(const string& error_message);
 
     void print_log(const struct sockaddr_in& source_addr, const struct sockaddr_in& dest_addr, const string& message);
-    void print_log(const string& host, const string& port, const struct sockaddr_in& dest_addr, const string& message);
-    void print_log(const struct sockaddr_in& source_addr, const string& host, const string& port, const string& message);
 } // namespace common
 
 #endif // COMMON_H

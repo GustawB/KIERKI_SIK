@@ -40,10 +40,13 @@ public:
     Serwer(int port, int timeout, const std::string& game_file_name);
     ~Serwer();
 
-    void start_game();
-    void run_game();
+    int start_game();
+    int run_game();
 
 private:
+    void print_log(const struct sockaddr_in& src_addr, const struct sockaddr_in& dest_addr, const string& message);
+    void print_error(const string& message);
+
     int run_deal(int32_t trick_type, const string& seat);
 
     int barrier();
@@ -66,7 +69,7 @@ private:
     int assert_server_read_pipe(ssize_t result);
     int assert_server_write_pipe(ssize_t result);
 
-    void close_server(const string& error_message);
+    int close_server(const string& error_message);
 
     int handle_disconnections();
 

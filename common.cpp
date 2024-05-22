@@ -10,21 +10,24 @@
 ssize_t common::read_from_socket(int socket_fd, string& buffer)
 {
     ssize_t bytes_read = 1;
+    ssize_t total_read = 0;
     // Read from socket char-by-char.
     while (bytes_read > 0)
     {
         char c;
         ssize_t bytes_read = read(socket_fd, &c, 1);
+        total_read += bytes_read;
 
         if (bytes_read <= 0) {return bytes_read;}
         else 
         { // Managed to read without problems.
             buffer += c;
             if (buffer.length() >= 2 && buffer.ends_with(DELIMETER)) {return buffer.length();}
+            else if (total_read > MAX_BUFFER_SIZE) {return -1;}
         }
     }
 
-    return bytes_read;
+    return total_read;
 }
 
 ssize_t common::read_from_pipe(int pipe_fd, string& buffer)
