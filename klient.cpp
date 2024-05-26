@@ -159,6 +159,27 @@ int Klient::prepare_client()
     else { socket_fd = common::create_socket6(); }
     if (socket_fd < 0) { return -1; }
 
+    if (ip_version == 4)
+    {
+        if (bind(socket_fd, (struct sockaddr *) &client_address, (socklen_t) sizeof(client_address)) < 0)
+        {
+            common::print_error("Failed to bind client socket.");
+            close(socket_fd);
+            close_pipe_sockets();
+            return -1;
+        }
+    }
+    else
+    {
+        if (bind(socket_fd, (struct sockaddr *) &client6_address, (socklen_t) sizeof(client6_address)) < 0)
+        {
+            common::print_error("Failed to bind client socket.");
+            close(socket_fd);
+            close_pipe_sockets();
+            return -1;
+        }
+    }
+
     if (ip_version == 4) 
     {
         if (connect(socket_fd, (struct sockaddr *) &server_address,
