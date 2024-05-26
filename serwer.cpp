@@ -545,9 +545,28 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
 {
     // Read the message from the client.
     string message;
+    struct timeval timeout_val;
+
+    timeout_val.tv_sec = timeout / 1000;
+    timeout_val.tv_usec = timeout % 1000;
+    
+    if (setsockopt (client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout_val, sizeof(timeout_val)) < 0) 
+    {
+        close_thread("Failed to set timeout.", {client_fd}, seat, false);
+        return -1;
+    }
     ssize_t socket_read = common::read_from_socket(client_fd, message);
     if (assert_client_read_socket(socket_read, {client_fd}, seat, false) < 0) {return -1;}
     print_log(client_addr, server_address, message);
+
+    // Turn off the timeout.
+    timeout_val.tv_sec = 0;
+    timeout_val.tv_usec = 0;
+    if (setsockopt (client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout_val, sizeof(timeout_val)) < 0) 
+    {
+        close_thread("Failed to disable timeout.", {client_fd}, seat, false);
+        return -1;
+    }
     
     if (regex::IAM_check(message))
     {
