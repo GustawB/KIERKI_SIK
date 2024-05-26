@@ -4,6 +4,8 @@
 #include <iomanip>
 #include <sstream>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <string.h>
 
 #include "common.h"
 
@@ -79,9 +81,103 @@ ssize_t common::create_socket()
     return socket_fd;
 }
 
-ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in& server_addr)
+ssize_t common::create_socket6()
 {
-    int server_fd = create_socket();
+    int socket_fd = socket(AF_INET6, SOCK_STREAM, 0);
+    if (socket_fd == -1) {print_error("Failed to create socket.");}
+    return socket_fd;
+}
+
+ssize_t common::get_server_ipv4_addr(char const *host, uint16_t port, struct sockaddr_in& server_address)
+{
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET; // IPv4
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    struct addrinfo *address_result;
+    int errcode = getaddrinfo(host, NULL, &hints, &address_result);
+    if (errcode != 0)
+    {
+        cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        return -1;
+    }
+
+    server_address.sin_family = AF_INET;   // IPv4
+    server_address.sin_addr.s_addr =       // IP address
+            ((struct sockaddr_in *) (address_result->ai_addr))->sin_addr.s_addr;
+    server_address.sin_port = htons(port); // port from the command line
+
+    freeaddrinfo(address_result);
+    return 0;
+}
+
+ssize_t common::get_server_ipv6_addr(char const *host, uint16_t port, struct sockaddr_in6& server_address)
+{
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET6; // IPv6
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    struct addrinfo *address_result;
+    int errcode = getaddrinfo(host, NULL, &hints, &address_result);
+    if (errcode != 0)
+    {
+        cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        return -1;
+    }
+
+    server_address.sin6_family = AF_INET6;   // IPv6
+    server_address.sin6_addr = ((struct sockaddr_in6 *)(address_result->ai_addr))->sin6_addr;
+    server_address.sin6_port = htons(port); // port from the command line
+
+    freeaddrinfo(address_result);
+    return 0;
+}
+
+ssize_t common::get_server_unknown_addr(char const *host, uint16_t port, struct sockaddr_in& v4_addr, struct sockaddr_in6& v6_addr)
+{
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC; // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    struct addrinfo *address_result;
+    int errcode = getaddrinfo(host, NULL, &hints, &address_result);
+    if (errcode != 0)
+    {
+        std::cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        return -1;
+    }
+
+    if (address_result->ai_family == AF_INET)
+    {
+        v4_addr.sin_family = AF_INET;
+        v4_addr.sin_addr.s_addr = ((struct sockaddr_in *)(address_result->ai_addr))->sin_addr.s_addr;
+        v4_addr.sin_port = htons(port);
+        return 0;
+    } else if (address_result->ai_family == AF_INET6)
+    {
+        v6_addr.sin6_family = AF_INET6;
+        v6_addr.sin6_addr = ((struct sockaddr_in6 *)(address_result->ai_addr))->sin6_addr;
+        v6_addr.sin6_port = htons(port);
+        return 1;
+    }
+    else
+    {
+        std::cerr << "Unknown address family.\n";
+        return -1;
+    }
+
+    freeaddrinfo(address_result);
+}
+
+ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in6& server_addr)
+{
+    int server_fd = create_socket6();
     if (server_fd == -1) {return -1;}
 
     int optval = 1;
@@ -91,9 +187,9 @@ ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in
         return 1;
     }
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port);
+    server_addr.sin6_family = AF_INET6;
+    server_addr.sin6_addr = in6addr_any;
+    if (port > 0) {server_addr.sin6_port = htons(port);}
 
     if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)
     {
@@ -110,7 +206,7 @@ ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in
     return server_fd;
 }
 
-ssize_t common::accept_client(int socket_fd, struct sockaddr_in& client_addr)
+ssize_t common::accept_client(int socket_fd, struct sockaddr_in6& client_addr)
 {
     socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(socket_fd, (struct sockaddr*)&client_addr, &client_addr_len);
@@ -134,6 +230,21 @@ void common::print_log(const struct sockaddr_in& source_addr, const struct socka
 {
     cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" << ntohs(source_addr.sin_port);
     cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" << ntohs(dest_addr.sin_port) << ",";
+    cout << get_time() << "] " << message;
+    cout.flush();
+}
+
+void common::print_log(const struct sockaddr_in6& source_addr, const struct sockaddr_in6& dest_addr, const string& message)
+{
+    char* str = (char*)malloc(INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &source_addr.sin6_addr, str, INET6_ADDRSTRLEN);
+    string src{str};
+    inet_ntop(AF_INET6, &dest_addr.sin6_addr, str, INET6_ADDRSTRLEN);
+    string dest{str};
+    free(str);
+
+    cout << "[" << src << ":" << ntohs(source_addr.sin6_port);
+    cout << "," << dest << ":" << ntohs(dest_addr.sin6_port) << ",";
     cout << get_time() << "] " << message;
     cout.flush();
 }

@@ -6,35 +6,18 @@ Klient::Klient(const string& host, int port, int ip, const string& seat_name, bo
     trick_number{1}, got_score{false}, got_total{false}
     {}
 
-void Klient::get_server_address(char const *host, uint16_t port)
-{
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET; // IPv4
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    struct addrinfo *address_result;
-    int errcode = getaddrinfo(host, NULL, &hints, &address_result);
-    if (errcode != 0)
-    {
-        cout << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-    }
-
-    server_address.sin_family = AF_INET;   // IPv4
-    server_address.sin_addr.s_addr =       // IP address
-            ((struct sockaddr_in *) (address_result->ai_addr))->sin_addr.s_addr;
-    server_address.sin_port = htons(port); // port from the command line
-
-    freeaddrinfo(address_result);
-}
-
 void Klient::close_worker_sockets(int socket_fd)
 {
     // Close my ends of pipes.
+    close(socket_fd);
+}
+
+void Klient::close_pipe_sockets()
+{
+    close(client_read_pipe[0]);
+    close(client_write_pipe[1]);
     close(client_read_pipe[1]);
     close(client_write_pipe[0]);
-    close(socket_fd);
 }
 
 void Klient::close_main_sockets(ssize_t result, const string& error_message = "")
@@ -47,8 +30,7 @@ void Klient::close_main_sockets(ssize_t result, const string& error_message = ""
     }
     // Close my ends of pipes.
     if (result == 1) { interaction_thread.join(); }
-    close(client_read_pipe[0]);
-    close(client_write_pipe[1]);
+    close_pipe_sockets();
 }
 
 void Klient::close_worker(int socket_fd, const string& error_message, const string& fd_msg)
@@ -153,26 +135,55 @@ int Klient::prepare_client()
         return -1;
     }
 
-    get_server_address(host_name.c_str(), port_number);
+    ssize_t result = -1;
+    if (ip_version == 4) { result = common::get_server_ipv4_addr(host_name.c_str(), port_number, server_address); }
+    else if (ip_version == 6) { result = common::get_server_ipv6_addr(host_name.c_str(), port_number, server6_address); }
+    else 
+    {
+        result = common::get_server_unknown_addr(host_name.c_str(), port_number, server_address, server6_address);
+        if (result < 0) { return -1; }
+        else if (result == 0) { ip_version = 4; }
+        else { ip_version = 6; }
+        cout << "IP version: " << ip_version << '\n';
+    }
+    
+    if (result < 0)
+    {
+        close_pipe_sockets();
+        return -1;
+    }
 
     // Create a socket.
-    int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd < 0) 
+    int socket_fd = -1;
+    if (ip_version == 4) { socket_fd = common::create_socket(); }
+    else { socket_fd = common::create_socket6(); }
+    if (socket_fd < 0) { return -1; }
+
+    if (ip_version == 4) 
     {
-        common::print_error("Failed to create socket.");
-        return -1;
+        if (connect(socket_fd, (struct sockaddr *) &server_address,
+                    (socklen_t) sizeof(server_address)) < 0)
+        {
+            common::print_error("Failed to connect to server.");
+            close(socket_fd);
+            close_pipe_sockets();
+            return -1;
+        }
+    }
+    else
+    {
+        if (connect(socket_fd, (struct sockaddr *) &server6_address,
+                    (socklen_t) sizeof(server6_address)) < 0)
+        {
+            common::print_error("Failed to connect to server.");
+            close(socket_fd);
+            close_pipe_sockets();
+            return -1;
+        }
     }
 
-    // Connect to the server.
-    if (connect(socket_fd, (struct sockaddr *) &server_address,
-                (socklen_t) sizeof(server_address)) < 0)
-    {
-        common::print_error("Failed to connect to server.");
-        close(socket_fd);
-        return -1;
-    }
-
-    getsockname(socket_fd, (struct sockaddr *) &client_address, (socklen_t *) sizeof(client_address));
+    if (ip_version == 4) { getsockname(socket_fd, (struct sockaddr *) &client_address, (socklen_t *) sizeof(client_address)); }
+    else { getsockname(socket_fd, (struct sockaddr *) &client6_address, (socklen_t *) sizeof(client6_address)); }
 
     string msg;
     if (senders::send_iam(socket_fd, seat, msg) < 0)
@@ -181,7 +192,12 @@ int Klient::prepare_client()
         close(socket_fd);
         return -1;
     }
-    common::print_log(client_address, server_address, msg);
+    if (is_ai) 
+    {
+        if (ip_version == 4) { common::print_log(client_address, server_address, msg); }
+        else { common::print_log(client6_address, server6_address, msg); } 
+    }
+    else { cout << "Connected to the server.\n"; }
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
     return socket_fd;
@@ -337,7 +353,8 @@ void Klient::handle_client(int socket_fd)
 
                     string msg;
                     ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card}, msg);
-                    common::print_log(client_address, server_address, msg);
+                    if (ip_version == 4) { common::print_log(client_address, server_address, msg); }
+                    else { common::print_log(client6_address, server6_address, msg); } 
                     if (assert_client_write_socket(send_result, msg.length(), socket_fd) < 0) { return; }
                 }
                 else
@@ -363,7 +380,8 @@ void Klient::handle_client(int socket_fd)
                 if (is_ai)
                 {
                     printing_mutex.lock();
-                    common::print_log(server_address, client_address, message);
+                    if (ip_version == 4) { common::print_log(server_address, client_address, message); }
+                    else { common::print_log(server6_address, client6_address, message); }
                     printing_mutex.unlock();
                 }
 
@@ -463,7 +481,8 @@ void Klient::handle_client(int socket_fd)
                         string msg;
                         ssize_t send_result = senders::send_trick(socket_fd, trick_number, {card_to_play}, msg);
                         printing_mutex.lock();
-                        common::print_log(client_address, server_address, msg);
+                        if (ip_version == 4) { common::print_log(client_address, server_address, msg); }
+                        else { common::print_log(client6_address, server6_address, msg); } 
                         printing_mutex.unlock();
                         if (assert_client_write_socket(send_result, msg.length(), socket_fd) < 0) { return; }
                     }

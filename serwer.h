@@ -20,6 +20,7 @@
 #include "senders.h"
 #include "file_reader.h"
 #include "points_calculator.h"
+#include <sys/time.h>
 
 using std::thread;
 using std::mutex;
@@ -44,7 +45,7 @@ public:
     int run_game();
 
 private:
-    void print_log(const struct sockaddr_in& src_addr, const struct sockaddr_in& dest_addr, const string& message);
+    void print_log(const struct sockaddr_in6& src_addr, const struct sockaddr_in6& dest_addr, const string& message);
     void print_error(const string& message);
 
     int run_deal(int32_t trick_type, const string& seat);
@@ -52,10 +53,10 @@ private:
     int barrier();
 
     void handle_connections();
-    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in& client_addr);
-    int client_poll(int client_fd, const string& seat, const struct sockaddr_in& client_addr);
+    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr);
+    int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr);
 
-    void handle_client(int client_fd, struct sockaddr_in client_addr);
+    void handle_client(int client_fd, struct sockaddr_in6 client_addr);
 
     void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_ended_by_server);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
@@ -73,7 +74,7 @@ private:
 
     int handle_disconnections();
 
-    struct sockaddr_in server_address;
+    struct sockaddr_in6 server_address;
 
     mutex memory_mutex;
     mutex print_mutex;

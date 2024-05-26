@@ -1,7 +1,9 @@
 #include "serwer.h"
+#include <arpa/inet.h>
+#include <netdb.h>
 
 Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-    : memory_mutex{}, print_mutex{}, port{port}, timeout{timeout}, game_file_name{game_file_name},
+    : memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
     occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, cards_on_table{}, round_scores{}, total_scores{},
@@ -12,7 +14,7 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
 
 Serwer::~Serwer() {}
 
-void Serwer::print_log(const struct sockaddr_in& src_addr, const struct sockaddr_in& dest_addr, const string& message)
+void Serwer::print_log(const struct sockaddr_in6& src_addr, const struct sockaddr_in6& dest_addr, const string& message)
 {
     print_mutex.lock();
     common::print_log(src_addr, dest_addr, message);
@@ -469,7 +471,8 @@ int Serwer::run_game()
 void Serwer::handle_connections()
 {
     // Create a socket.
-    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE, server_address);
+    struct sockaddr_in6 server_addr;
+    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE, server_addr);
     if (socket_fd < 0) {
         string server_message = DISCONNECTED;
         ssize_t pipe_write = common::write_to_pipe(server_read_pipes[4][1], server_message.data());
@@ -502,7 +505,7 @@ void Serwer::handle_connections()
             // Handle the new connection.
             if (poll_descriptors[0].revents & POLLIN)
             {
-                struct sockaddr_in client_address;
+                struct sockaddr_in6 client_address;
                 int client_fd = common::accept_client(socket_fd, client_address);
                 if (client_fd < 0) { close_thread("Failed to accept connection.", {socket_fd}, CONNECTIONS_THREAD, false); }
                 else
@@ -538,7 +541,7 @@ void Serwer::handle_connections()
     }
 }
 
-int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in& client_addr)
+int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr)
 {
     // Read the message from the client.
     string message;
@@ -622,7 +625,7 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in& 
     return 1;
 }
 
-int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr_in& client_addr)
+int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr)
 {
     ssize_t pipe_read = -1;
     ssize_t socket_read = -1;
@@ -633,6 +636,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
     poll_descriptors[0].events = POLLIN;
     poll_descriptors[1].fd = server_write_pipes[seats_to_array[seat]][0];
     poll_descriptors[1].events = POLLIN;
+    int timeout_copy = timeout;
 
     bool b_was_destined_to_play = false;
 
@@ -646,7 +650,14 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
         memory_mutex.lock();
         int16_t current_trick = trick_number;
         memory_mutex.unlock();
-        int poll_result = poll(&poll_descriptors[0], 2, -1);
+        int poll_result = -1;
+        struct timeval start, end;
+        if (!b_was_destined_to_play) { poll_result = poll(&poll_descriptors[0], 2, -1); }
+        else 
+        { 
+            gettimeofday(&start, NULL);
+            poll_result = poll(&poll_descriptors[0], 1, timeout_copy);
+        }
         if (poll_result == 0 && b_was_destined_to_play)
         { // Timeout.
             string msg;
@@ -664,7 +675,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
         }
         else
         {
-            if (poll_descriptors[0].revents & (POLLHUP | POLLIN))
+            gettimeofday(&end, NULL);
+            if (poll_descriptors[0].revents & POLLIN)
             { // Client sent a message.
                 string client_message;
                 socket_read = common::read_from_socket(client_fd, client_message);
@@ -676,6 +688,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     {
                         // Set current message;
                         memory_mutex.lock();
+                        timeout_copy = timeout;
                         if (current_trick < 10) {client_message = client_message.substr(6, client_message.size() - 8);}
                         else {client_message = client_message.substr(7, client_message.size() - 9);}
                         auto received_card = find(cards[seats_to_array[seat]].begin(), cards[seats_to_array[seat]].end(), client_message);
@@ -716,6 +729,23 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     // Invalid message, close the connection.
                     close_thread("Client send invalid message.", {client_fd}, seat, true);
                     return -1;
+                }
+            }
+            else if (b_was_destined_to_play)
+            {
+                // Update timeout; if <= 0, resend a request for a card.
+                int passed_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec);
+                timeout_copy -= passed_ms;
+                if (timeout_copy <= 0)
+                {
+                    string msg;
+                    memory_mutex.lock();
+                    vector<string> cards_on_table_loc{cards_on_table};
+                    timeout_copy = timeout;
+                    memory_mutex.unlock();
+                    socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
+                    print_log(server_address, client_addr, msg);
+                    if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                 }
             }
             
@@ -820,7 +850,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
     return 1;
 }
 
-void Serwer::handle_client(int client_fd, struct sockaddr_in client_addr)
+void Serwer::handle_client(int client_fd, struct sockaddr_in6 client_addr)
 {
     string seat;
     // Reserve a spot at the table.

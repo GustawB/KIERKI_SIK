@@ -42,10 +42,9 @@ public:
     int run_client();
 
 private:
-    void get_server_address(char const *host, uint16_t port);
-
     void close_worker_sockets(int socket_fd);
     void close_main_sockets(ssize_t result, const string& error_message);
+    void close_pipe_sockets();
 
     void close_worker(int socket_fd, const string& error_message, const string& fd_msg);
     void close_main(const string& error_message, const string& fd_msg);
@@ -62,7 +61,9 @@ private:
     string strategy(const string& color);
 
     struct sockaddr_in server_address;
+    struct sockaddr_in6 server6_address;
     struct sockaddr_in client_address;
+    struct sockaddr_in6 client6_address;
 
     thread interaction_thread;
 
