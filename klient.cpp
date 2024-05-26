@@ -159,7 +159,7 @@ int Klient::prepare_client()
     else { socket_fd = common::create_socket6(); }
     if (socket_fd < 0) { return -1; }
 
-    if (ip_version == 4)
+    /*if (ip_version == 4)
     {
         if (bind(socket_fd, (struct sockaddr *) &client_address, (socklen_t) sizeof(client_address)) < 0)
         {
@@ -178,7 +178,7 @@ int Klient::prepare_client()
             close_pipe_sockets();
             return -1;
         }
-    }
+    }*/
 
     if (ip_version == 4) 
     {

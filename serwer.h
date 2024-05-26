@@ -53,8 +53,8 @@ private:
     int barrier();
 
     void handle_connections();
-    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr);
-    int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr);
+    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn);
+    int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn);
 
     void handle_client(int client_fd, struct sockaddr_in6 client_addr);
 
@@ -112,6 +112,8 @@ private:
     string start_seat_global;
 
     string last_taker;
+
+    string player_turn;
 
     int32_t waiting_on_barrier;
 
