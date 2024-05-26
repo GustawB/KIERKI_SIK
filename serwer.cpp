@@ -710,9 +710,25 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                         timeout_copy = timeout;
                         if (current_trick < 10) {client_message = client_message.substr(6, client_message.size() - 8);}
                         else {client_message = client_message.substr(7, client_message.size() - 9);}
+                        // Check if the client has the card.
                         auto received_card = find(cards[seats_to_array[seat]].begin(), cards[seats_to_array[seat]].end(), client_message);
+                        char main_color = cards_on_table[0][0];
+                        bool b_played_right_color = (main_color == client_message[client_message.size() - 1]);
+                        if (!b_played_right_color) 
+                        {
+                            b_played_right_color = true;
+                            // Didn't play the right color. Check if he had it.
+                            for (const string& card : cards[seats_to_array[seat]])
+                            {
+                                if (card[card.size() - 1] == main_color)
+                                {
+                                    b_played_right_color = false;
+                                    break;
+                                }
+                            }
+                        }
 
-                        if (received_card == cards[seats_to_array[seat]].end())
+                        if (received_card == cards[seats_to_array[seat]].end() || !b_played_right_color)
                         {
                             memory_mutex.unlock();
                             // Client send something he didn't have; send back wrong.
