@@ -1,18 +1,19 @@
 #include "points_calculator.h"
 
 PointsCalculator::PointsCalculator(const vector<string>& played_cards, const string& starter, int16_t trick_type, int16_t trick)
-    : trick_type{trick_type}, trick{trick}, starter{starter}, seats{{ "N", "E", "S", "W" }},
+    : trick_type{trick_type}, trick{trick}, starter{starter}, seats{"N", "E", "S", "W" },
     seats_mapping{{ "N", 0 }, { "E", 1 }, { "S", 2 }, { "W", 3 }}
 {
     for (int i = 0; i < 4; i++)
     {
-        colors[i] = played_cards[i].substr(played_cards[i].size() - 1, 1);
+        int beginning = seats_mapping[starter];
+        colors[(beginning + i) % 4] = played_cards[i].substr(played_cards[i].size() - 1, 1);
         string figure = played_cards[i].substr(0, played_cards[i].size() - 1);
-        if (figure == "J") { figures[i] = 11; }
-        else if (figure == "Q") { figures[i] = 12; }
-        else if (figure == "K") { figures[i] = 13; }
-        else if (figure == "A") { figures[i] = 14; }
-        else { figures[i] = stoi(figure); }
+        if (figure == "J") { figures[(beginning + i) % 4] = 11; }
+        else if (figure == "Q") { figures[(beginning + i) % 4] = 12; }
+        else if (figure == "K") { figures[(beginning + i) % 4] = 13; }
+        else if (figure == "A") { figures[(beginning + i) % 4] = 14; }
+        else { figures[(beginning + i) % 4] = std::stoi(figure); }
     }
 }
 

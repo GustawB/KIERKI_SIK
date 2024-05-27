@@ -20,7 +20,8 @@ int main(int argc, char* argv[])
     string game_file_name;
     int timeout = 5;
     
-    parser::parse_server_args(argc, argv, port, game_file_name, timeout);
+    int result = parser::parse_server_args(argc, argv, port, game_file_name, timeout);
+    if (result != 0) {return result;}
 
     Serwer s(port, timeout, game_file_name);
     if (s.start_game() == 0) {return s.run_game();}

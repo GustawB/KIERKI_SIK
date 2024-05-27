@@ -71,7 +71,7 @@ void client_printer::print_taken(const std::string& s)
 
 void client_printer::print_score(const std::string& s)
 {
-    string scores = s.substr(6, s.size() - 8);
+    string scores = s.substr(5, s.size() - 7);
     cout << "The scores are:\n";
     for (const string& score : regex::extract_seat_score(scores)) 
     {
@@ -81,7 +81,7 @@ void client_printer::print_score(const std::string& s)
 
 void client_printer::print_total(const std::string& s)
 {
-    string scores = s.substr(6, s.size() - 8);
+    string scores = s.substr(5, s.size() - 7);
     cout << "The total scores are:\n";
     for (const string& score : regex::extract_seat_score(scores))
     {

@@ -76,7 +76,7 @@ std::string regex::extract_trick_nr(const std::string& s)
 
 std::vector<std::string> regex::extract_seat_score(const std::string& s)
 {
-    boost::regex seat_score_regex("([NESW]d+)");
+    boost::regex seat_score_regex("([NESW]\\d+)");
     boost::sregex_iterator seat_score_iterator(s.begin(), s.end(), seat_score_regex);
     boost::sregex_iterator end;
     std::vector<std::string> seat_scores;

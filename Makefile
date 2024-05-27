@@ -1,6 +1,6 @@
 CC = g++
 BOOST_ROOT = /home/gustaw/boost_library/boost_1_74_0
-CFLAGS = -Wall -Wextra -O2 -std=c++20 -I$(BOOST_ROOT)
+CFLAGS = -Wall -Wextra -O2 -std=c++20 -g -I$(BOOST_ROOT)
 LFLAGS = -L/home/gustaw/boost_library/boost_1_74_0/stage/lib -lm -l:libboost_program_options.a -l:libboost_regex.a
 
 .PHONY: all clean

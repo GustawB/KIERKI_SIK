@@ -158,21 +158,22 @@ ssize_t common::get_server_unknown_addr(char const *host, uint16_t port, struct 
         v4_addr.sin_family = AF_INET;
         v4_addr.sin_addr.s_addr = ((struct sockaddr_in *)(address_result->ai_addr))->sin_addr.s_addr;
         v4_addr.sin_port = htons(port);
+        freeaddrinfo(address_result);
         return 0;
     } else if (address_result->ai_family == AF_INET6)
     {
         v6_addr.sin6_family = AF_INET6;
         v6_addr.sin6_addr = ((struct sockaddr_in6 *)(address_result->ai_addr))->sin6_addr;
         v6_addr.sin6_port = htons(port);
+        freeaddrinfo(address_result);
         return 1;
     }
     else
     {
         std::cerr << "Unknown address family.\n";
+        freeaddrinfo(address_result);
         return -1;
     }
-
-    freeaddrinfo(address_result);
 }
 
 ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in6& server_addr)
@@ -189,6 +190,8 @@ ssize_t common::setup_server_socket(int port, int queue_size, struct sockaddr_in
 
     server_addr.sin6_family = AF_INET6;
     server_addr.sin6_addr = in6addr_any;
+    server_addr.sin6_flowinfo = 0;
+    server_addr.sin6_scope_id = 0;
     if (port > 0) {server_addr.sin6_port = htons(port);}
 
     if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)

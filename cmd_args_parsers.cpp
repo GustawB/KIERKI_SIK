@@ -1,9 +1,13 @@
 #include "cmd_args_parsers.h"
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string>
+#include <fstream>
 
 using std::string;
 using std::pair;
 
-void parser::parse_server_args(int argc, char* argv[], int& port, string& game_file_name, int& timeout)
+int parser::parse_server_args(int argc, char* argv[], int& port, string& game_file_name, int& timeout)
 {
     try 
     {
@@ -28,6 +32,7 @@ void parser::parse_server_args(int argc, char* argv[], int& port, string& game_f
         if (vm.count("-f")) 
         {
             game_file_name = vm["-f"].as<vector<string>>()[0];
+            cout << vm["-f"].as<vector<string>>().size() << std::endl;
         }
         else 
         {
@@ -45,13 +50,25 @@ void parser::parse_server_args(int argc, char* argv[], int& port, string& game_f
     }
     catch(exception& e) 
     {
-        cerr << "error: " << e.what() << "\n";
-        exit(1);
+        common::print_error(e.what());
+        return 1;
     }
     catch(...) 
     {
-        cerr << "Exception of unknown type!\n";
+        common::print_error("Exception of unknown type!");
+        return 1;
     }
+
+    // Check if file exists.
+    cout << game_file_name << std::endl;
+    if (FILE* file = fopen(game_file_name.c_str(), "r")) { fclose(file); }
+    else 
+    {
+        common::print_error("Game file does not exist.");
+        return 1;
+    }
+    cout << "Game file exists." << std::endl;
+    return 0;
 }
 
 pair<string, string> reg_additional_options(const string& s)
@@ -66,7 +83,7 @@ pair<string, string> reg_additional_options(const string& s)
     else { return make_pair(string(), string()); }
 }
 
-void parser::parse_client_args(int argc, char* argv[], string& host, int& port_number, int& IP_v, string& seat, bool& is_AI)
+int parser::parse_client_args(int argc, char* argv[], string& host, int& port_number, int& IP_v, string& seat, bool& is_AI)
 {
     try
     {
@@ -128,11 +145,14 @@ void parser::parse_client_args(int argc, char* argv[], string& host, int& port_n
     }
     catch(exception& e) 
     {
-        cerr << "error: " << e.what() << "\n";
-        exit(1);
+        common::print_error(e.what());
+        return 1;
     }
     catch(...) 
     {
-        cerr << "Exception of unknown type!\n";
+        common::print_error("Exception of unknown type!");
+        return 1;
     }
+
+    return 0;
 }

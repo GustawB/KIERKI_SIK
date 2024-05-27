@@ -3,10 +3,10 @@
 #include <netdb.h>
 
 Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-    : memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
+    : server_address{}, memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
     occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
-    current_message{}, cards_on_table{}, round_scores{}, total_scores{},
+    current_message{}, cards_on_table{}, round_scores{{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}}}, total_scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}},
     trick_number{0}, cards{}, deal{}, taken_tricks{}, taken_takers{}, 
     last_taker{}, player_turn{"x"}, waiting_on_barrier{0}, working_threads{0}
     {}
@@ -393,7 +393,6 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                                 else
                                 {
                                     // Wait for threads.
-                                    cout << "Enter reconnection barrier.\n";
                                     int result = barrier();
                                     if (result < 0) {return -1;}
                                     else if (result > 0) {b_received_card = true;}
@@ -413,6 +412,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
 
         // Got four cards.
         memory_mutex.lock();
+        string queue;
         PointsCalculator calculator(cards_on_table, seats[beginning], trick_type, i + 1);
         pair<string, int32_t> result = calculator.calculate_points();
         last_taker = result.first;
@@ -433,7 +433,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
     // End of the deal.
     memory_mutex.lock();
     for (const auto& [key, value] : scores) { total_scores[key] += value; }
-    round_scores = scores;
+    for (const auto& [key, value] : scores) { round_scores[key] = value; }
     memory_mutex.unlock();
     for (int i = 0; i < 4; ++i)
     {
@@ -606,7 +606,6 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
                     ++trick_iter;
                     ++taker_iter;
                 }
-                cout << "Player turn: " << player_turn << '\n';
                 if (player_turn == seat)
                 {
                     b_is_my_turn = true;
@@ -699,6 +698,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
             string msg;
             memory_mutex.lock();
             vector<string> cards_on_table_loc{cards_on_table};
+            timeout_copy = timeout;
             memory_mutex.unlock();
             socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
             print_log(server_address, client_addr, msg);
@@ -718,9 +718,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 socket_read = common::read_from_socket(client_fd, client_message);
                 print_log(client_addr, server_address, client_message);
                 if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
-                //memory_mutex.lock();
-                //if (player_turn == seat) {b_was_destined_to_play = true;}
-                //memory_mutex.unlock();
                 if (regex::TRICK_client_check(client_message, current_trick))
                 {
                     if (b_was_destined_to_play)
@@ -735,7 +732,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                         bool b_played_right_color = true;
                         if(cards_on_table.size() > 0)
                         {
-                            char main_color = cards_on_table[0][0];
+                            char main_color = cards_on_table[0][cards_on_table[0].size() - 1];
                             b_played_right_color = (main_color == client_message[client_message.size() - 1]);
                             if (!b_played_right_color) 
                             {
@@ -793,11 +790,10 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     return -1;
                 }
             }
-            /*else if (b_was_destined_to_play)
+            else if (b_was_destined_to_play)
             {
-                cout << "SEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\n";
                 // Update timeout; if <= 0, resend a request for a card.
-                int passed_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec);
+                int passed_ms = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
                 timeout_copy -= passed_ms;
                 if (timeout_copy <= 0)
                 {
@@ -810,7 +806,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
                 }
-            }*/
+            }
             
             if (poll_descriptors[1].revents & POLLIN)
             { // Server sent a message.
