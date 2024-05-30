@@ -153,7 +153,12 @@ int Serwer::close_server(const string& error_message = "")
         ssize_t pipe_write = common::write_to_pipe(server_write_pipes[4][1], END);
         if (pipe_write != 1) {std::runtime_error("Failed to close connection thread.");}
         
-        connection_manager_thread.join(); 
+        try { connection_manager_thread.join(); }
+        catch (const std::system_error& e) 
+        {
+            print_error(e.what());
+            b_did_something_fail = true;
+        }
     }
     catch (const std::exception& e) 
     { 
@@ -174,7 +179,12 @@ int Serwer::close_server(const string& error_message = "")
 
     for (auto iter = client_threads.begin(); iter != client_threads.end(); ++iter)
     {
-        iter->second.join();
+        try { iter->second.join(); }
+        catch (const std::system_error& e) 
+        {
+            print_error(e.what());
+            b_did_something_fail = true;
+        }
         cout << "Thread " << iter->first << " joined.\n";
     }
 
@@ -509,8 +519,17 @@ void Serwer::handle_connections()
                 else
                 {
                     memory_mutex.lock();
-                    thread client_thread(&Serwer::handle_client, this, client_fd, client_address, thread_id);
-                    client_threads[thread_id] = move(client_thread);
+                    try 
+                    {
+                        thread client_thread(&Serwer::handle_client, this, client_fd, client_address, thread_id);
+                        client_threads[thread_id] = move(client_thread); 
+                    }
+                    catch (const std::system_error& e) 
+                    {
+                        memory_mutex.unlock();
+                        close_thread(e.what(), {socket_fd, client_fd}, CONNECTIONS_THREAD, false);
+                        return;
+                    }
                     ++thread_id;
                     memory_mutex.unlock();
                     cout << "Thread " << thread_id << " created.\n";
