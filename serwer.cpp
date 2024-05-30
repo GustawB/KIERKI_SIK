@@ -181,6 +181,11 @@ int Serwer::close_server(const string& error_message = "")
         cout << "Thread " << iter->first << " joined.\n";
     }
 
+    for (int i = 0; i < 5; ++i)
+    {
+        close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
+    }
+
     if (error_message != "") 
     {
         print_error(error_message);
@@ -332,10 +337,14 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         for (uint64_t id : joinable_threads)
         {
             // find in in map
-            client_threads[id].join();
-            client_threads.erase(id);
-            joinable_threads.erase(find(joinable_threads.begin(), joinable_threads.end(), id));
-            cout << "Thread " << id << " joined.\n";
+            auto iter = client_threads.find(id);
+            if (iter != client_threads.end())
+            {
+                client_threads[id].join();
+                client_threads.erase(iter);
+                joinable_threads.erase(find(joinable_threads.begin(), joinable_threads.end(), id));
+                cout << "Thread " << id << " joined.\n";
+            }
         }
         memory_mutex.unlock();
         for (int i = 0; i < 4; ++i)
