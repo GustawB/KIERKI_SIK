@@ -3,7 +3,7 @@
 #include <netdb.h>
 
 Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-    : server_address{}, client_threads{}, memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
+    : server_address{}, thread_id{0}, client_threads{}, joinable_threads{}, memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
     occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, cards_on_table{}, round_scores{{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}}}, total_scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}},
@@ -175,62 +175,10 @@ int Serwer::close_server(const string& error_message = "")
         }
     }
 
-    //cout << "Server closed.\n";
-
-    /*
-    // Join client threads.
-    //struct pollfd poll_descriptors[4];
-    for (int i = 0; i < 4; ++i)
+    for (auto iter = client_threads.begin(); iter != client_threads.end(); ++iter)
     {
-        poll_descriptors[i].fd = server_read_pipes[i][0];
-        poll_descriptors[i].events = POLLIN;
-    }
-
-    bool b_did_end = false;
-    while(!b_did_end)
-    {
-        int poll_result = poll(poll_descriptors, 4, -1);
-        if (poll_result <= 0) 
-        {
-            for (int i = 0; i < 4; ++i) 
-            {
-                // Close my ends of pipes.
-                close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
-            }
-            print_error("Failed to poll on server exit.");
-            b_did_something_fail = true;
-        }
-        else
-        {
-            for (int i = 0; i < 4; ++i)
-            {
-                if (poll_descriptors[i].revents & POLLIN)
-                {
-                    string msg;
-                    ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], msg);
-                    if (pipe_read != 1) 
-                    {
-                        print_error("Failed to read from server pipe.");
-                        b_did_something_fail = true;
-                        b_did_end = true; // Shit happened.
-                    }
-                    else if (msg == END) { b_did_end = true; }
-                }
-            }
-            // Close my ends of pipes.
-            for (int i = 0; i < 4; ++i) 
-            {
-                // Close pipes.
-                close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
-            }
-        }
-    }*/
-
-    //sleep(2);
-
-    for (thread& t : client_threads)
-    {
-        t.join();
+        iter->second.join();
+        cout << "Thread " << iter->first << " joined.\n";
     }
 
     if (error_message != "") 
@@ -379,6 +327,16 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
         cards_on_table.clear();
         ++trick_number;
         int beginning = seats_to_array[last_taker];
+
+        // Join joinable threads.
+        for (uint64_t id : joinable_threads)
+        {
+            // find in in map
+            client_threads[id].join();
+            client_threads.erase(id);
+            joinable_threads.erase(find(joinable_threads.begin(), joinable_threads.end(), id));
+            cout << "Thread " << id << " joined.\n";
+        }
         memory_mutex.unlock();
         for (int i = 0; i < 4; ++i)
         {
@@ -546,9 +504,11 @@ void Serwer::handle_connections()
                 {
                     memory_mutex.lock();
                     ++working_threads;
-                    thread client_thread(&Serwer::handle_client, this, client_fd, client_address);
-                    client_threads.push_back(move(client_thread));
+                    thread client_thread(&Serwer::handle_client, this, client_fd, client_address, thread_id);
+                    client_threads[thread_id] = move(client_thread);
+                    ++thread_id;
                     memory_mutex.unlock();
+                    cout << "Thread " << thread_id << " created.\n";
                 }
             }
 
@@ -577,6 +537,7 @@ void Serwer::handle_connections()
 
 int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn)
 {
+    cout << "Reserving spot.\n";
     // Read the message from the client.
     string message;
     struct timeval timeout_val;
@@ -933,11 +894,17 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
     return 1;
 }
 
-void Serwer::handle_client(int client_fd, struct sockaddr_in6 client_addr)
+void Serwer::handle_client(int client_fd, struct sockaddr_in6 client_addr, uint64_t thread_id)
 {
     string seat;
     bool b_is_my_turn = false;
     // Reserve a spot at the table.
-    if (reserve_spot(client_fd, seat, client_addr, b_is_my_turn) <= 0) { return; }
-    client_poll(client_fd, seat, client_addr, b_is_my_turn);
+    cout << "Hello. I'm thread " << thread_id << ".\n";
+    if (reserve_spot(client_fd, seat, client_addr, b_is_my_turn) > 0) 
+    {   
+        client_poll(client_fd, seat, client_addr, b_is_my_turn);
+    }
+    memory_mutex.lock();
+    joinable_threads.push_back(thread_id);
+    memory_mutex.unlock();
 }

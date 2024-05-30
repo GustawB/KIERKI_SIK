@@ -56,7 +56,7 @@ private:
     int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn);
     int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn);
 
-    void handle_client(int client_fd, struct sockaddr_in6 client_addr);
+    void handle_client(int client_fd, struct sockaddr_in6 client_addr, uint64_t thread_id);
 
     void close_thread(const string& error_message, initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_ended_by_server);
     void close_fds(const std::string& error_message, initializer_list<int> fds);
@@ -73,7 +73,9 @@ private:
     int close_server(const string& error_message);
     struct sockaddr_in6 server_address;
 
-    vector<thread> client_threads;
+    uint64_t thread_id;
+    map<uint64_t, thread> client_threads;
+    vector<uint64_t> joinable_threads;
 
     mutex memory_mutex;
     mutex print_mutex;
