@@ -42,7 +42,6 @@ public:
     int run_client();
 
 private:
-    void close_worker_sockets(int socket_fd);
     void close_main_sockets(ssize_t result, const string& error_message);
     void close_pipe_sockets();
 
@@ -80,8 +79,7 @@ private:
     string seat;
     bool is_ai;
 
-    mutex memory_mutex;
-    mutex printing_mutex;
+    mutex access_mutex;
 
     queue<string> messages_to_send;
     vector<vector<string>> taken_tricks;

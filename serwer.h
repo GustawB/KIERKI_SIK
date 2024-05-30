@@ -117,8 +117,6 @@ private:
     string player_turn;
 
     int32_t waiting_on_barrier;
-
-    int32_t working_threads;
 };
 
 #endif // SERWER_H

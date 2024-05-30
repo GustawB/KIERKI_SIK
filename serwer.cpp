@@ -8,7 +8,7 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, cards_on_table{}, round_scores{{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}}}, total_scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}},
     trick_number{0}, cards{}, deal{}, taken_tricks{}, taken_takers{}, 
-    last_taker{}, player_turn{"x"}, waiting_on_barrier{0}, working_threads{0}
+    last_taker{}, player_turn{"x"}, waiting_on_barrier{0}
     {}
     
 
@@ -60,9 +60,6 @@ initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_
         if (pipe_write != 1) { print_error("Failed to notify server."); }
     }
     for (int fd : fds) { close(fd); }
-    memory_mutex.lock();
-    --working_threads;
-    memory_mutex.unlock();
 }
 
 int Serwer::assert_client_read_socket(ssize_t result,
@@ -512,7 +509,6 @@ void Serwer::handle_connections()
                 else
                 {
                     memory_mutex.lock();
-                    ++working_threads;
                     thread client_thread(&Serwer::handle_client, this, client_fd, client_address, thread_id);
                     client_threads[thread_id] = move(client_thread);
                     ++thread_id;
@@ -631,19 +627,10 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
             ssize_t socket_write = senders::send_busy(client_fd, occupied_seats, msg);
             print_log(server_address, client_addr, msg);
 
-            if (assert_client_write_socket(socket_write, {client_fd}, seat, false) < 0) 
-            {
-                memory_mutex.lock();
-                --working_threads;
-                memory_mutex.unlock();
-                return -1;
-            }
+            if (assert_client_write_socket(socket_write, {client_fd}, seat, false) < 0) { return -1; }
             else 
             {
                 close_fds({client_fd});
-                memory_mutex.lock();
-                --working_threads;
-                memory_mutex.unlock();
                 return 0;
             }
         }
@@ -816,7 +803,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 if (server_message == CARD_PLAY)
                 {
                     // Server wants the client to play a card.
-                    //++current_trick;
                     string msg;
                     memory_mutex.lock();
                     vector<string> cards_on_table_loc{cards_on_table};
@@ -831,7 +817,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 {
                     // Server wants the client to play a deal.
                     string msg;
-                    //current_trick = 0;
                     memory_mutex.lock();
                     vector<string> cards_loc{cards[seats_to_array[seat]]};
                     string seat_loc = last_taker;
