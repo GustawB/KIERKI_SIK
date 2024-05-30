@@ -71,10 +71,9 @@ private:
     int assert_server_write_pipe(ssize_t result);
 
     int close_server(const string& error_message);
-
-    int handle_disconnections();
-
     struct sockaddr_in6 server_address;
+
+    vector<thread> client_threads;
 
     mutex memory_mutex;
     mutex print_mutex;

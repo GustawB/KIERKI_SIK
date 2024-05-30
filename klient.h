@@ -55,6 +55,10 @@ private:
     int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main);
     int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main);
 
+    void print_log(const struct sockaddr_in6& src_addr, const struct sockaddr_in6& dest_addr, const string& message);
+    void print_log(const struct sockaddr_in& src_addr, const struct sockaddr_in& dest_addr, const string& message);
+    void print_error(const string& message);
+
     int prepare_client();
     void handle_client(int socket_fd);
 

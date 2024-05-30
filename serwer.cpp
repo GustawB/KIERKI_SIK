@@ -3,7 +3,7 @@
 #include <netdb.h>
 
 Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
-    : server_address{}, memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
+    : server_address{}, client_threads{}, memory_mutex{}, print_mutex{}, port{port}, timeout{timeout * 1000}, game_file_name{game_file_name},
     occupied{0}, seats_status{{"N", -1}, {"E", -1}, {"S", -1}, {"W", -1}},
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, cards_on_table{}, round_scores{{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}}}, total_scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}},
@@ -43,18 +43,20 @@ void Serwer::close_thread(const string& error_message,
 initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_ended_by_server = false)
 {
     if (error_message != "") { print_error(error_message); }
-    string server_message = DISCONNECTED;
     if (b_was_occupying)
     {
         memory_mutex.lock();
         --occupied;
         if (occupied < 0) {occupied = 0;}
-        seats_status[seat] = -1;
+        // Basically, I'm protecting myself from the case when I'm closing everything
+        // but one last connection manages to grab free seat. Now it will be like 
+        // "Damn, seat is already taken, I'm outta here."
+        if (!b_was_ended_by_server) {seats_status[seat] = -1;}
         memory_mutex.unlock();
     }
     if ((!b_was_ended_by_server) && (b_was_occupying || seat == CONNECTIONS_THREAD))
     {
-        ssize_t pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], server_message.data());
+        ssize_t pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], DISCONNECTED);
         if (pipe_write != 1) { print_error("Failed to notify server."); }
     }
     for (int fd : fds) { close(fd); }
@@ -81,19 +83,30 @@ initializer_list<int> fds, const string& seat, bool b_was_occupying)
     return 0;
 }
 
+int Serwer::assert_client_write_socket(ssize_t result,
+initializer_list<int> fds, const string& seat, bool b_was_occupying)
+{
+    if (result <= 0)
+    {
+        close_thread("Failed to send message to the client.", fds, seat, b_was_occupying);
+        return -1;
+    }
+    return 0;
+}
+
 int Serwer::assert_client_read_pipe(ssize_t result, initializer_list<int> fds,
 const string& seat, bool b_was_occupying)
 {
     if (result == 0)
     {
         // Server disconnected. Shouldn't happen but whatever, close connections.
-        close_thread("Server disconnected.", fds, seat, b_was_occupying);
+        close_thread("Server disconnected (pipe closed).", fds, seat, b_was_occupying);
         return -1;
     }
     else if (result < 0)
     {
         // Error communicating with the server.
-        close_thread("Failed to read from server.", fds, seat, b_was_occupying);
+        close_thread("Failed to read from server pipe.", fds, seat, b_was_occupying);
         return -1;
     }
     return 0;
@@ -110,27 +123,16 @@ const string& seat, bool b_was_occupying)
     return 0;
 }
 
-int Serwer::assert_client_write_socket(ssize_t result,
-initializer_list<int> fds, const string& seat, bool b_was_occupying)
-{
-    if (result <= 0)
-    {
-        close_thread("Failed to send message to the client.", fds, seat, b_was_occupying);
-        return -1;
-    }
-    return 0;
-}
-
 int Serwer::assert_server_read_pipe(ssize_t result)
 {
     if (result == 0)
     {
-        close_server("Thread disconnected.");
+        close_server("Thread closed its pipes (illegal).");
         return 0;
     }
     else if (result < 0)
     {
-        close_server("Failed to read from server.");
+        close_server("Failed to read from server thread.");
         return -1;
     }
     return 1;
@@ -149,7 +151,20 @@ int Serwer::assert_server_write_pipe(ssize_t result)
 int Serwer::close_server(const string& error_message = "")
 {
     bool b_did_something_fail = false;
-    for (int i = 0; i < 5; ++i)
+    try 
+    {
+        ssize_t pipe_write = common::write_to_pipe(server_write_pipes[4][1], END);
+        if (pipe_write != 1) {std::runtime_error("Failed to close connection thread.");}
+        
+        connection_manager_thread.join(); 
+    }
+    catch (const std::exception& e) 
+    { 
+        print_error(e.what()); 
+        b_did_something_fail = true;
+    }
+
+    for (int i = 0; i < 4; ++i)
     {
         // Send close message to threads.
         ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], DISCONNECTED);
@@ -160,48 +175,62 @@ int Serwer::close_server(const string& error_message = "")
         }
     }
 
-    try { connection_manager_thread.join(); }
-    catch (const std::system_error& e) 
-    { 
-        print_error("Failed to join connection manager thread."); 
-        b_did_something_fail = true;
-    }
+    //cout << "Server closed.\n";
 
+    /*
     // Join client threads.
-    struct pollfd poll_descriptors[4];
+    //struct pollfd poll_descriptors[4];
     for (int i = 0; i < 4; ++i)
     {
         poll_descriptors[i].fd = server_read_pipes[i][0];
         poll_descriptors[i].events = POLLIN;
     }
 
-    int poll_result = poll(poll_descriptors, 4, -1);
-    if (poll_result <= 0) 
+    bool b_did_end = false;
+    while(!b_did_end)
     {
-        for (int i = 0; i < 4; ++i) 
+        int poll_result = poll(poll_descriptors, 4, -1);
+        if (poll_result <= 0) 
         {
-            // Close my ends of pipes.
-            close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
-        }
-        print_error("Failed to poll on server exit.");
-        b_did_something_fail = true;
-    }
-    else
-    {
-        for (int i = 0; i < 4; ++i)
-        {
-            if (poll_descriptors[i].revents & POLLIN)
+            for (int i = 0; i < 4; ++i) 
             {
-                // Server woken up by a client.
-                break;
+                // Close my ends of pipes.
+                close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
+            }
+            print_error("Failed to poll on server exit.");
+            b_did_something_fail = true;
+        }
+        else
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                if (poll_descriptors[i].revents & POLLIN)
+                {
+                    string msg;
+                    ssize_t pipe_read = common::read_from_pipe(server_read_pipes[i][0], msg);
+                    if (pipe_read != 1) 
+                    {
+                        print_error("Failed to read from server pipe.");
+                        b_did_something_fail = true;
+                        b_did_end = true; // Shit happened.
+                    }
+                    else if (msg == END) { b_did_end = true; }
+                }
+            }
+            // Close my ends of pipes.
+            for (int i = 0; i < 4; ++i) 
+            {
+                // Close pipes.
+                close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
             }
         }
-        // Close my ends of pipes.
-        for (int i = 0; i < 4; ++i) 
-        {
-            // Close my ends of pipes.
-            close_fds({server_read_pipes[i][0], server_read_pipes[i][1], server_write_pipes[i][0], server_write_pipes[i][1]});
-        }
+    }*/
+
+    //sleep(2);
+
+    for (thread& t : client_threads)
+    {
+        t.join();
     }
 
     if (error_message != "") 
@@ -262,6 +291,7 @@ int Serwer::barrier()
                     }
                     else if (wake_msg == DISCONNECTED)
                     {
+                        // We want a new client to be able to participate in the barrier.
                         ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], BARRIER_RESPONSE);
                         if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
                     }
@@ -401,6 +431,7 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                             else
                             {
                                 // Invalid message.
+                                cout << "Message: " << thread_message << '\n';
                                 close_server("Invalid message in main game server poll from client thread.");
                                 return -1;
                             }
@@ -475,8 +506,7 @@ int Serwer::run_game()
 void Serwer::handle_connections()
 {
     // Create a socket.
-    struct sockaddr_in6 server_addr;
-    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE, server_addr);
+    int socket_fd = common::setup_server_socket(port, QUEUE_SIZE, server_address);
     if (socket_fd < 0) {
         string server_message = DISCONNECTED;
         ssize_t pipe_write = common::write_to_pipe(server_read_pipes[4][1], server_message.data());
@@ -514,10 +544,10 @@ void Serwer::handle_connections()
                 if (client_fd < 0) { close_thread("Failed to accept connection.", {socket_fd}, CONNECTIONS_THREAD, false); }
                 else
                 {
-                    thread client_thread(&Serwer::handle_client, this, client_fd, client_address);
-                    client_thread.detach();
                     memory_mutex.lock();
                     ++working_threads;
+                    thread client_thread(&Serwer::handle_client, this, client_fd, client_address);
+                    client_threads.push_back(move(client_thread));
                     memory_mutex.unlock();
                 }
             }
@@ -528,7 +558,7 @@ void Serwer::handle_connections()
                 string server_message;
                 ssize_t pipe_read = common::read_from_pipe(server_write_pipes[4][0], server_message);
                 if (assert_client_read_pipe(pipe_read, {socket_fd}, CONNECTIONS_THREAD, false) < 0) { return; }
-                if (server_message == DISCONNECTED)
+                if (server_message == DISCONNECTED || server_message == END)
                 {
                     // Server wants to close the connection.
                     close_fds({socket_fd});
@@ -683,7 +713,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
 
         memory_mutex.lock();
         int16_t current_trick = trick_number;
-        //if (player_turn == seat) {b_was_destined_to_play = true;}
         memory_mutex.unlock();
         int poll_result = -1;
         struct timeval start, end;
@@ -846,11 +875,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 {
                     // Server wants the client to disconnect.
                     close_thread("", {client_fd}, seat, true, true);
-                    if (working_threads == 0) 
-                    {
-                        socket_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], DISCONNECTED);
-                        if (socket_write < 0) {return -1;}
-                    }
                     return 0;
                 }
                 else if (server_message == TAKEN)

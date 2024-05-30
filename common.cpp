@@ -20,7 +20,11 @@ ssize_t common::read_from_socket(int socket_fd, string& buffer)
         ssize_t bytes_read = read(socket_fd, &c, 1);
         total_read += bytes_read;
 
-        if (bytes_read <= 0) {return bytes_read;}
+        if (bytes_read <= 0) 
+        {
+            cout << "ERRNO: " << errno << " " << "Total read: " << total_read << "\n";
+            return bytes_read;
+        }
         else 
         { // Managed to read without problems.
             buffer += c;
