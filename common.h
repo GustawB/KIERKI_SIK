@@ -48,6 +48,8 @@ namespace common
     ssize_t get_server_ipv6_addr(char const *host, uint16_t port, struct sockaddr_in6& server_address);
     ssize_t get_server_unknown_addr(char const *host, uint16_t port, struct sockaddr_in& v4_addr, struct sockaddr_in6& v6_addr);
 
+    void assert_close(int fd);
+
     void print_error(const string& error_message);
 
     void print_log(const struct sockaddr_in& source_addr, const struct sockaddr_in& dest_addr, const string& message);

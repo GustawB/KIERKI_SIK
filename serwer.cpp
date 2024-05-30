@@ -31,12 +31,12 @@ void Serwer::print_error(const string& message)
 void Serwer::close_fds(const std::string& error_message, initializer_list<int> fds)
 {
     common::print_error(error_message);
-    for (int fd : fds) { close(fd); }
+    for (int fd : fds) { common::assert_close(fd); }
 }
 
 void Serwer::close_fds(initializer_list<int> fds)
 {
-    for (int fd : fds) { close(fd); }
+    for (int fd : fds) { common::assert_close(fd); }
 }
 
 void Serwer::close_thread(const string& error_message,
@@ -59,7 +59,7 @@ initializer_list<int> fds, const string& seat, bool b_was_occupying, bool b_was_
         ssize_t pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], DISCONNECTED);
         if (pipe_write != 1) { print_error("Failed to notify server."); }
     }
-    for (int fd : fds) { close(fd); }
+    for (int fd : fds) { common::assert_close(fd); }
 }
 
 int Serwer::assert_client_read_socket(ssize_t result,

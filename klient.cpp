@@ -9,10 +9,10 @@ Klient::Klient(const string& host, int port, int ip, const string& seat_name, bo
 
 void Klient::close_pipe_sockets()
 {
-    close(client_read_pipe[0]);
-    close(client_write_pipe[1]);
-    close(client_read_pipe[1]);
-    close(client_write_pipe[0]);
+    common::assert_close(client_read_pipe[0]);
+    common::assert_close(client_read_pipe[1]);
+    common::assert_close(client_write_pipe[0]);
+    common::assert_close(client_write_pipe[1]);
 }
 
 void Klient::close_main_sockets(ssize_t result, const string& error_message = "")
@@ -29,7 +29,7 @@ void Klient::close_worker(int socket_fd, const string& error_message, const stri
     if (pipe_result != 1) { print_error("Failed to notify client."); }
     if (error_message != "") {print_error(error_message);}
     // Close my ends of pipes.
-    close(socket_fd);
+    common::assert_close(socket_fd);
 }
 
 void Klient::close_main(const string& error_message, const string& fd_msg)
@@ -193,7 +193,7 @@ int Klient::prepare_client()
                     (socklen_t) sizeof(server_address)) < 0)
         {
             print_error("Failed to connect to server.");
-            close(socket_fd);
+            common::assert_close(socket_fd);
             close_pipe_sockets();
             return -1;
         }
@@ -204,7 +204,7 @@ int Klient::prepare_client()
                     (socklen_t) sizeof(server6_address)) < 0)
         {
             print_error("Failed to connect to server.");
-            close(socket_fd);
+            common::assert_close(socket_fd);
             close_pipe_sockets();
             return -1;
         }
@@ -220,7 +220,7 @@ int Klient::prepare_client()
     if (senders::send_iam(socket_fd, seat, msg) < 0)
     {
         print_error("Failed to send seat name.");
-        close(socket_fd);
+        common::assert_close(socket_fd);
         return -1;
     }
     
@@ -359,7 +359,7 @@ void Klient::handle_client(int socket_fd)
                 
                 if (message == DISCONNECTED)
                 {
-                    close(socket_fd);
+                    common::assert_close(socket_fd);
                     return;
                 }
                 else if (message == CARD_PLAY)

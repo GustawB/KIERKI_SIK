@@ -68,6 +68,11 @@ ssize_t common::write_to_pipe(int pipe_fd, const string& buffer)
     return bytes_written;
 }
 
+void common::assert_close(int fd)
+{
+    if (close(fd) == -1) {print_error("Failed to close file descriptor."); }
+}
+
 void common::print_error(const string& error_message)
 {
     cerr << "\n\tERROR: " << error_message;
