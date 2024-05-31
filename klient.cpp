@@ -153,20 +153,20 @@ int Klient::prepare_client()
         else { ip_version = 6; }
         cout << "IP version: " << ip_version << '\n';
     }
-    
+ 
     if (result < 0)
     {
         close_pipe_sockets();
         return -1;
     }
-
+ 
     // Create a socket.
     int socket_fd = -1;
     if (ip_version == 4) { socket_fd = common::create_socket(); }
     else { socket_fd = common::create_socket6(); }
     if (socket_fd < 0) { return -1; }
-
-    /*if (ip_version == 4)
+/*
+    if (ip_version == 4)
     {
         if (bind(socket_fd, (struct sockaddr *) &client_address, (socklen_t) sizeof(client_address)) < 0)
         {
@@ -228,7 +228,7 @@ int Klient::prepare_client()
     else { print_log(client6_address, server6_address, msg); } 
 
     interaction_thread = thread(&Klient::handle_client, this, socket_fd);
-    return socket_fd;
+    return socket_fd; 
 }
 
 int Klient::run_client()

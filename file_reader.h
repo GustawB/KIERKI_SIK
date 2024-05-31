@@ -6,7 +6,6 @@
 #include <string>
 #include <array>
 
-using std::cout;
 using std::string;
 using std::array;
 using std::ifstream;
@@ -20,6 +19,12 @@ public:
     FileReader(const string& file_name);
     ~FileReader();
 
+    /*
+    * Read the next deal from the file.
+    * Return 1 if a deal was read successfully.
+    * Return 0 if the end of the file was reached.
+    * Return -1 if the file could not be opened.
+    */
     ssize_t read_next_deal();
 
     string get_seat() const;

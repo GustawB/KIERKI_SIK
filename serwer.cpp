@@ -185,7 +185,6 @@ int Serwer::close_server(const string& error_message = "")
             print_error(e.what());
             b_did_something_fail = true;
         }
-        cout << "Thread " << iter->first << " joined.\n";
     }
 
     for (int i = 0; i < 5; ++i)
@@ -358,7 +357,6 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                 client_threads[id].join();
                 client_threads.erase(iter);
                 joinable_threads.erase(find(joinable_threads.begin(), joinable_threads.end(), id));
-                cout << "Thread " << id << " joined.\n";
             }
         }
         memory_mutex.unlock();
@@ -413,7 +411,6 @@ int Serwer::run_deal(int32_t trick_type, const string& seat)
                             else
                             {
                                 // Invalid message.
-                                cout << "Message: " << thread_message << '\n';
                                 close_server("Invalid message in main game server poll from client thread.");
                                 return -1;
                             }
@@ -540,7 +537,6 @@ void Serwer::handle_connections()
                     }
                     ++thread_id;
                     memory_mutex.unlock();
-                    cout << "Thread " << thread_id << " created.\n";
                 }
             }
 
@@ -569,7 +565,6 @@ void Serwer::handle_connections()
 
 int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier)
 {
-    cout << "Reserving spot.\n";
     // Read the message from the client.
     string message;
     struct timeval timeout_val;
@@ -614,8 +609,8 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
             if (deal_loc[0].size() != 0)
             {
                 socket_read = senders::send_deal(client_fd, trick_type_loc, deal_starter_loc, deal[seats_to_array[seat]] , msg);
-                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_read, {client_fd}, seat, false) < 0) {return -1;}
+                print_log(server_address, client_addr, msg);
                 memory_mutex.lock();
                 auto trick_iter = taken_tricks.begin();
                 auto taker_iter = taken_takers.begin();
@@ -623,8 +618,8 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
                 {
                     memory_mutex.unlock();
                     socket_read = senders::send_taken(client_fd, i+1, *trick_iter, *taker_iter, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_read, {client_fd}, seat, false) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                     memory_mutex.lock();
                     ++trick_iter;
                     ++taker_iter;
@@ -636,8 +631,8 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
                     vector<string> cards_on_table_loc{cards_on_table};
                     memory_mutex.unlock();
                     socket_read = senders::send_trick(client_fd, trick_nr_loc, cards_on_table_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_read, {client_fd}, seat, false) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                 }
                 else {memory_mutex.unlock();}
             }
@@ -652,11 +647,10 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
             memory_mutex.unlock();
             string msg;
             ssize_t socket_write = senders::send_busy(client_fd, occupied_seats, msg);
-            print_log(server_address, client_addr, msg);
-
             if (assert_client_write_socket(socket_write, {client_fd}, seat, false) < 0) { return -1; }
             else 
             {
+                print_log(server_address, client_addr, msg);
                 close_fds({client_fd});
                 return 0;
             }
@@ -676,17 +670,18 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
     return 1;
 }
 
-int Serwer::parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick)
+int Serwer::parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick, int& timeout_copy)
 {
     ssize_t socket_write = -1;
     ssize_t pipe_write = -1;
+    print_log(client_addr, server_address, message);
     if (regex::TRICK_client_check(message, current_trick))
     {
         if (b_was_destined_to_play)
         {
             // Set current message;
             memory_mutex.lock();
-            int timeout_copy = timeout;
+            timeout_copy = timeout;
             if (current_trick < 10) { message = message.substr(6, message.size() - 8);}
             else { message = message.substr(7, message.size() - 9);}
             // Check if the client has the card.
@@ -719,8 +714,8 @@ int Serwer::parse_message(string& message, int client_fd, const string& seat, co
                 // Client send something he didn't have; send back wrong.
                 string msg;
                 socket_write = senders::send_wrong(client_fd, current_trick, msg);
-                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                print_log(server_address, client_addr, msg);
             }
             else
             {
@@ -740,8 +735,8 @@ int Serwer::parse_message(string& message, int client_fd, const string& seat, co
             // Client send a message out of order.
             string msg;
             socket_write = senders::send_wrong(client_fd, current_trick, msg);
-            print_log(server_address, client_addr, msg);
             if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+            print_log(server_address, client_addr, msg);
         }
         
     }
@@ -787,7 +782,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
             {
                 string message{ barrier_messages[seats_to_array[seat]].front() };
                 barrier_messages[seats_to_array[seat]].pop();
-                if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
+                if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick, timeout_copy) < 0) {return -1;}
             }
         }
 
@@ -809,8 +804,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 timeout_copy = timeout;
                 memory_mutex.unlock();
                 socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
-                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                print_log(server_address, client_addr, msg);
             }
         }
         else if (poll_result <= 0)
@@ -825,7 +820,6 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
             { // Client sent a message.
                 string client_message;
                 socket_read = common::read_from_socket(client_fd, client_message);
-                print_log(client_addr, server_address, client_message);
                 if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
                 if (b_is_barrier)
                 {
@@ -833,7 +827,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     barrier_messages[seats_to_array[seat]].push(client_message);
                     memory_mutex.unlock();
                 }
-                else if (parse_message(client_message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
+                else if (parse_message(client_message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick, timeout_copy) < 0) {return -1;}
             }
             else if (b_was_destined_to_play)
             {
@@ -848,8 +842,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     timeout_copy = timeout;
                     memory_mutex.unlock();
                     socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                 }
             }
             
@@ -868,8 +862,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     current_trick = trick_number;
                     memory_mutex.unlock();
                     socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                     b_was_destined_to_play = true;
                 }
                 else if(server_message == DEAL)
@@ -882,8 +876,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     int trick_loc = trick_type_global;
                     memory_mutex.unlock();
                     socket_write = senders::send_deal(client_fd, trick_loc, seat_loc, cards_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                 }
                 else if (server_message == DISCONNECTED)
                 {
@@ -900,8 +894,8 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     memory_mutex.unlock();
                     string msg;
                     socket_write = senders::send_taken(client_fd, current_trick, cards_on_table_loc, taker_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                 }
                 else if(server_message == SCORES)
                 {
@@ -913,13 +907,13 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     string msg;
                     // Score.
                     socket_write = senders::send_score(client_fd, round_scores_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
 
                     // Total score.
                     socket_write = senders::send_total(client_fd, total_scores_loc, msg);
-                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+                    print_log(server_address, client_addr, msg);
                 }
                 else if (server_message == BARRIER_RESPONSE)
                 {
@@ -938,12 +932,11 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 else if (server_message == BARRIER_END)
                 {
                     b_is_barrier = false;
-                    cout << "Barrier end.\n";
                     while (barrier_messages[seats_to_array[seat]].size() > 0)
                     {
                         string message{ barrier_messages[seats_to_array[seat]].front() };
                         barrier_messages[seats_to_array[seat]].pop();
-                        if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
+                        if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick, timeout_copy) < 0) {return -1;}
                     }
                 }
                 else
@@ -965,7 +958,6 @@ void Serwer::handle_client(int client_fd, struct sockaddr_in6 client_addr, uint6
     bool b_is_my_turn = false;
     bool b_is_barrier = false;
     // Reserve a spot at the table.
-    cout << "Hello. I'm thread " << thread_id << ".\n";
     if (reserve_spot(client_fd, seat, client_addr, b_is_my_turn, b_is_barrier) > 0) 
     {   
         client_poll(client_fd, seat, client_addr, b_is_my_turn, b_is_barrier);

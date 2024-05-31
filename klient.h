@@ -36,31 +36,105 @@ class Klient
 {
 public:
     Klient() = delete;
-    Klient(const string& host, int port, int ip, const string& seat_name, bool AI);
+    Klient(const string& host, int32_t port, int16_t ip,
+        const string& seat_name, bool AI);
     ~Klient() = default;
 
-    int run_client();
+    /*
+    * Main function used to run the client.
+    */
+    int16_t run_client();
 
 private:
+    /*
+    * Wrapper for close_pipe_sockets() that will print error if needed.
+    * On result == 1, it will join the interaction_thread.
+    */
     void close_main_sockets(ssize_t result, const string& error_message);
+
+    /*
+    * Function tha will close all pipes.
+    */
     void close_pipe_sockets();
 
-    void close_worker(int socket_fd, const string& error_message, const string& fd_msg);
+    /*
+    * Function that will close thread responsible for interaction with server.
+    */
+    void close_worker(int32_t socket_fd, const string& error_message,
+        const string& fd_msg);
+
+    /*
+    * Function that will close thread responsible 
+    * for interaction with client and main logic.
+    */
     void close_main(const string& error_message, const string& fd_msg);
 
-    int assert_client_read_socket(ssize_t result, int socket_fd);
-    int assert_client_write_socket(ssize_t result, ssize_t expected, int socket_fd);
+    /*
+    * Function that will check if reading from socket was successful.
+    * If not, it will close the socket and return -1.
+    */
+    int16_t assert_client_read_socket(ssize_t result, int32_t socket_fd);
 
-    int assert_client_read_pipe(ssize_t result, int socket_fd, bool is_main);
-    int assert_client_write_pipe(ssize_t result, int socket_fd, bool is_main);
+    /*
+    * Function that will check if writing to socket was successful.
+    * If not, it will close the socket and return -1.
+    */
+    int16_t assert_client_write_socket(ssize_t result, ssize_t expected,
+        int32_t socket_fd);
 
-    void print_log(const struct sockaddr_in6& src_addr, const struct sockaddr_in6& dest_addr, const string& message);
-    void print_log(const struct sockaddr_in& src_addr, const struct sockaddr_in& dest_addr, const string& message);
+    /*
+    * Function that will check if reading from pipe was successful.
+    * If not, it will close the pipe and return -1.
+    */
+    int16_t assert_client_read_pipe(ssize_t result,
+        int32_t socket_fd, bool is_main);
+
+    /*
+    * Function that will check if writing to pipe was successful.
+    * If not, it will close the pipe and return -1.
+    */
+    int16_t assert_client_write_pipe(ssize_t result,
+        int32_t socket_fd, bool is_main);
+
+    /*
+    * Wrapper for common::print_log() that will acquire mutex to have 
+    * exclusive access to the standard stream.
+    * Overload for IPv4 addresses.
+    */
+    void print_log(const struct sockaddr_in6& src_addr,
+        const struct sockaddr_in6& dest_addr, const string& message);
+
+    /*
+    * Wrapper for common::print_log() that will acquire mutex to have
+    * exclusive access to the standard stream.
+    * Overload for IPv6 addresses.
+    */
+    void print_log(const struct sockaddr_in& src_addr,
+        const struct sockaddr_in& dest_addr, const string& message);
+
+    /*
+    * Wrapper for common::print_error() that will acquire mutex to have
+    * exclusive access to the error stream.
+    */
     void print_error(const string& message);
 
-    int prepare_client();
-    void handle_client(int socket_fd);
+    /*
+    * Utility function to get the server socket. Depending on the IP version,
+    * it will create either IPv4 or IPv6 socket. On soccess, it will return
+    * the socket file descriptor. On failure, it will return -1.
+    */
+    int16_t prepare_client();
 
+    /*
+    * Function passed to the interaction_thread. It will handle the interaction
+    * with the server.
+    */
+    void handle_client(int32_t socket_fd);
+
+    /*
+    * Function responsible for choosing the card
+    * to play in the current trick if the client is AI.
+    */
     string strategy(const string& color);
 
     struct sockaddr_in server_address;
@@ -70,12 +144,12 @@ private:
 
     thread interaction_thread;
 
-    int client_read_pipe[2];
-    int client_write_pipe[2];
+    int32_t client_read_pipe[2];
+    int32_t client_write_pipe[2];
 
     string host_name;
-    int port_number;
-    int ip_version;
+    int32_t port_number;
+    int16_t ip_version;
     string seat;
     bool is_ai;
 

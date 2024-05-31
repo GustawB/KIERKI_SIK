@@ -1,28 +1,30 @@
 #include "cmd_args_parsers.h"
-#include <sys/stat.h>
-#include <unistd.h>
-#include <string>
-#include <fstream>
 
 using std::string;
+using std::vector;
+using std::exception;
+using std::invalid_argument;
 using std::pair;
 
-int parser::parse_server_args(int argc, char* argv[], int& port, string& game_file_name, int& timeout)
+namespace po = boost::program_options;
+
+int16_t parser::parse_server_args(int argc, char* argv[], int32_t& port, 
+    string& game_file_name, int32_t& timeout)
 {
     try 
     {
         po::options_description desc("Allowed options");
         desc.add_options()
-            (",p", po::value<vector<int>>()->multitoken(), "port number")
+            (",p", po::value<vector<int32_t>>()->multitoken(), "port number")
             (",f", po::value<vector<string>>()->multitoken(), "game file name")
-            (",t", po::value<vector<int>>()->multitoken(), "timeout");
+            (",t", po::value<vector<int32_t>>()->multitoken(), "timeout");
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
         po::notify(vm);
 
         if (vm.count("-p")) 
         {
-            port = vm["-p"].as<vector<int>>()[0];
+            port = vm["-p"].as<vector<int32_t>>()[0];
             if (port < 0) 
             {
                 throw invalid_argument("Port number must be non-negative");
@@ -32,7 +34,6 @@ int parser::parse_server_args(int argc, char* argv[], int& port, string& game_fi
         if (vm.count("-f")) 
         {
             game_file_name = vm["-f"].as<vector<string>>()[0];
-            cout << vm["-f"].as<vector<string>>().size() << std::endl;
         }
         else 
         {
@@ -41,7 +42,7 @@ int parser::parse_server_args(int argc, char* argv[], int& port, string& game_fi
 
         if (vm.count("-t")) 
         {
-            timeout = vm["-t"].as<vector<int>>()[0];
+            timeout = vm["-t"].as<vector<int32_t>>()[0];
             if (timeout < 0) 
             {
                 throw invalid_argument("Timeout must be non-negative");
@@ -60,14 +61,12 @@ int parser::parse_server_args(int argc, char* argv[], int& port, string& game_fi
     }
 
     // Check if file exists.
-    cout << game_file_name << std::endl;
     if (FILE* file = fopen(game_file_name.c_str(), "r")) { fclose(file); }
     else 
     {
         common::print_error("Game file does not exist.");
         return 1;
     }
-    cout << "Game file exists." << std::endl;
     return 0;
 }
 
@@ -83,7 +82,8 @@ pair<string, string> reg_additional_options(const string& s)
     else { return make_pair(string(), string()); }
 }
 
-int parser::parse_client_args(int argc, char* argv[], string& host, int& port_number, int& IP_v, string& seat, bool& is_AI)
+int16_t parser::parse_client_args(int argc, char* argv[], string& host, 
+    int32_t& port_number, int16_t& IP_v, string& seat, bool& is_AI)
 {
     try
     {
@@ -92,14 +92,15 @@ int parser::parse_client_args(int argc, char* argv[], string& host, int& port_nu
         desc.add_options()
             ("help", "produce help message")
             (",h", po::value<vector<string>>()->multitoken(), "host name")
-            (",p", po::value<vector<int>>()->multitoken(), "port number")
-            ("IP", po::value<vector<int>>()->multitoken(), "IP")
+            (",p", po::value<vector<int32_t>>()->multitoken(), "port number")
+            ("IP", po::value<vector<int16_t>>()->multitoken(), "IP")
             ("seat", po::value<vector<string>>()->multitoken(), "seat")
             ("AI", po::value<vector<string>>()->multitoken(), "AI");
             
 
         po::variables_map vm;
-        po::store(po::command_line_parser(argc, argv).options(desc).extra_parser(reg_additional_options).run(), vm);
+        po::store(po::command_line_parser(argc, argv).options(desc)
+            .extra_parser(reg_additional_options).run(), vm);
         po::notify(vm);
 
         if (!vm.count("-h")) 
@@ -115,13 +116,13 @@ int parser::parse_client_args(int argc, char* argv[], string& host, int& port_nu
         {
             throw invalid_argument("Port number must be provided");
         }
-        else if (vm["-p"].as<vector<int>>()[0] < 0) 
+        else if (vm["-p"].as<vector<int32_t>>()[0] < 0) 
         {
             throw invalid_argument("Port number must be non-negative");
         }
         else 
         {
-            port_number = vm["-p"].as<vector<int>>()[0];
+            port_number = vm["-p"].as<vector<int32_t>>()[0];
         }
 
         if (!vm.count("seat")) 
@@ -140,7 +141,7 @@ int parser::parse_client_args(int argc, char* argv[], string& host, int& port_nu
 
         if (vm.count("IP")) 
         {
-            IP_v = vm["IP"].as<vector<int>>()[0];
+            IP_v = vm["IP"].as<vector<int16_t>>()[0];
         }
     }
     catch(exception& e) 

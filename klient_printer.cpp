@@ -25,7 +25,8 @@ void client_printer::print_deal(const std::string& s)
     char trick_type = s[4];
     char starter_seat = s[5];
     string cards = s.substr(6, s.size() - 8);
-    cout << "New deal " << trick_type << ": " << "staring place: " << starter_seat << ", your cards:";
+    cout << "New deal " << trick_type << ": " << "staring place: "
+        << starter_seat << ", your cards:";
     bool b_is_first = true;
     for (const string& card : regex::extract_cards(cards)) 
     { 
@@ -75,7 +76,8 @@ void client_printer::print_score(const std::string& s)
     cout << "The scores are:\n";
     for (const string& score : regex::extract_seat_score(scores)) 
     {
-         cout << score[0] << " | " << score.substr(1, score.size() - 1) << "\n";
+         cout << score[0] << " | " 
+            << score.substr(1, score.size() - 1) << "\n";
     }
 }
 
@@ -89,7 +91,8 @@ void client_printer::print_total(const std::string& s)
     }
 }
 
-void client_printer::print_trick(const std::string& s, int16_t trick_nr, vector<string> my_cards)
+void client_printer::print_trick(const std::string& s,
+    int16_t trick_nr, vector<string> my_cards)
 {
     string cards;
     if (trick_nr < 10) { cards = s.substr(6, s.size() - 8); }
@@ -143,7 +146,8 @@ void client_printer::print_my_cards(const vector<string>& my_cards)
     cout << ".\n";
 }
 
-void client_printer::print_my_tricks(const vector<vector<string>>& taken_tricks)
+void client_printer::print_my_tricks
+    (const vector<vector<string>>& taken_tricks)
 {
     for (const vector<string>& trick : taken_tricks)
     {

@@ -56,7 +56,7 @@ private:
 
     void handle_connections();
     int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier);
-    int parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick);
+    int parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick, int& timeout_copy);
     int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn, bool b_is_barreir);
 
     void handle_client(int client_fd, struct sockaddr_in6 client_addr, uint64_t thread_id);

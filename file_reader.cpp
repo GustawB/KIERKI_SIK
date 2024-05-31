@@ -25,7 +25,11 @@ ssize_t FileReader::read_next_deal()
 
     string line;
     getline(file_stream, line);
-    if (line.empty()) { return 0; } // End of file I guess.;
+    if (line.empty()) 
+    { // End of file;
+        file_stream.close();
+        return 0; 
+    }
     trick_type = stoi(line.substr(0, 1));
     seat = line.substr(1, 1);
     for (int i = 0; i < 4; ++i)
