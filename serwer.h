@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <vector>
+#include <queue>
 #include <mutex>
 #include <array>
 #include <map>
@@ -27,6 +28,7 @@ using std::mutex;
 using std::array;
 using std::string;
 using std::vector;
+using std::queue;
 using std::cout;
 using std::map;
 using std::find;
@@ -53,8 +55,9 @@ private:
     int barrier();
 
     void handle_connections();
-    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn);
-    int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn);
+    int reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier);
+    int parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick);
+    int client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn, bool b_is_barreir);
 
     void handle_client(int client_fd, struct sockaddr_in6 client_addr, uint64_t thread_id);
 
@@ -117,6 +120,9 @@ private:
     string player_turn;
 
     int32_t waiting_on_barrier;
+    bool b_is_barrier_ongoing;
+
+    array<queue<string>, 4> barrier_messages;
 };
 
 #endif // SERWER_H

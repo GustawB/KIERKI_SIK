@@ -26,8 +26,9 @@
 #define ERROR "e"
 #define DEAL "l"
 #define END "f"
+#define BARRIER_END "r"
 
-namespace common 
+namespace common
 {
     #define DELIMETER "\r\n"
 

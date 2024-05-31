@@ -8,7 +8,7 @@ Serwer::Serwer(int port, int timeout, const std::string& game_file_name)
     seats_to_array{{"N", 0}, {"E", 1}, {"S", 2}, {"W", 3}, {"K", 4}}, 
     current_message{}, cards_on_table{}, round_scores{{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}}}, total_scores{{"N", 0}, {"E", 0}, {"S", 0}, {"W", 0}},
     trick_number{0}, cards{}, deal{}, taken_tricks{}, taken_takers{}, 
-    last_taker{}, player_turn{"x"}, waiting_on_barrier{0}
+    last_taker{}, player_turn{"x"}, waiting_on_barrier{0}, b_is_barrier_ongoing{false},  barrier_messages{}
     {}
     
 
@@ -205,6 +205,7 @@ int Serwer::barrier()
 {
     int32_t waiting = 0;
     memory_mutex.lock();
+    b_is_barrier_ongoing = true;
     occupied = 0;
     waiting = 4 - occupied;
     memory_mutex.unlock();
@@ -271,7 +272,14 @@ int Serwer::barrier()
         }
         memory_mutex.lock();
         waiting = 4 - occupied;
+        if (waiting == 0) {b_is_barrier_ongoing = false;}
         memory_mutex.unlock();
+    }
+
+    for (int i = 0; i < 4; ++i)
+    {
+        ssize_t pipe_write = common::write_to_pipe(server_write_pipes[i][1], BARRIER_END);
+        if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
     }
 
     return b_received_card;
@@ -559,7 +567,7 @@ void Serwer::handle_connections()
     }
 }
 
-int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn)
+int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier)
 {
     cout << "Reserving spot.\n";
     // Read the message from the client.
@@ -661,10 +669,93 @@ int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6&
         return -1;
     }
 
+    memory_mutex.lock();
+    if (b_is_barrier_ongoing) {b_is_barrier = true;}
+    memory_mutex.unlock();
+
     return 1;
 }
 
-int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn)
+int Serwer::parse_message(string& message, int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool& b_was_destined_to_play, int16_t current_trick)
+{
+    ssize_t socket_write = -1;
+    ssize_t pipe_write = -1;
+    if (regex::TRICK_client_check(message, current_trick))
+    {
+        if (b_was_destined_to_play)
+        {
+            // Set current message;
+            memory_mutex.lock();
+            int timeout_copy = timeout;
+            if (current_trick < 10) { message = message.substr(6, message.size() - 8);}
+            else { message = message.substr(7, message.size() - 9);}
+            // Check if the client has the card.
+            auto received_card = find(cards[seats_to_array[seat]].begin(), cards[seats_to_array[seat]].end(), message);
+            bool b_played_right_color = true;
+            if(cards_on_table.size() > 0)
+            {
+                char main_color = cards_on_table[0][cards_on_table[0].size() - 1];
+                b_played_right_color = (main_color == message[message.size() - 1]);
+                if (!b_played_right_color) 
+                {
+                    b_played_right_color = true;
+                    // Didn't play the right color. Check if he had it.
+                    for (const string& card : cards[seats_to_array[seat]])
+                    {
+                        if (card[card.size() - 1] == main_color)
+                        {
+                            b_played_right_color = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (received_card == cards[seats_to_array[seat]].end() || !b_played_right_color)
+            {
+                if (received_card == cards[seats_to_array[seat]].end()) {print_error("Client send a card he didn't have.");}
+                else {print_error("Client send a card with a wrong color.");}
+                memory_mutex.unlock();
+                // Client send something he didn't have; send back wrong.
+                string msg;
+                socket_write = senders::send_wrong(client_fd, current_trick, msg);
+                print_log(server_address, client_addr, msg);
+                if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+            }
+            else
+            {
+                // We received a valid card. Noice.
+                cards[seats_to_array[seat]].erase(received_card);
+                cards_on_table.push_back(message);
+                player_turn = "x";
+                memory_mutex.unlock();
+                // Notify server that the client played a card.
+                pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], CARD_PLAY);
+                if (assert_client_write_pipe(pipe_write, {client_fd}, seat, true) < 0) {return -1;}
+                b_was_destined_to_play = false;
+            }
+        }
+        else
+        {
+            // Client send a message out of order.
+            string msg;
+            socket_write = senders::send_wrong(client_fd, current_trick, msg);
+            print_log(server_address, client_addr, msg);
+            if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+        }
+        
+    }
+    else
+    {
+        // Invalid message, close the connection.
+        close_thread("Client send invalid message.", {client_fd}, seat, true);
+        return -1;
+    }
+
+    return 0;
+}
+
+int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr_in6& client_addr, bool b_is_my_turn, bool b_is_barrier)
 {
     ssize_t pipe_read = -1;
     ssize_t socket_read = -1;
@@ -690,6 +781,16 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
         memory_mutex.lock();
         int16_t current_trick = trick_number;
         memory_mutex.unlock();
+        if (!b_is_barrier)
+        {
+            while (barrier_messages[seats_to_array[seat]].size() > 0)
+            {
+                string message{ barrier_messages[seats_to_array[seat]].front() };
+                barrier_messages[seats_to_array[seat]].pop();
+                if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
+            }
+        }
+
         int poll_result = -1;
         struct timeval start, end;
         if (!b_was_destined_to_play) { poll_result = poll(&poll_descriptors[0], 2, -1); }
@@ -700,16 +801,19 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
         }
         if (poll_result == 0 && b_was_destined_to_play)
         { // Timeout.
-            string msg;
-            memory_mutex.lock();
-            vector<string> cards_on_table_loc{cards_on_table};
-            timeout_copy = timeout;
-            memory_mutex.unlock();
-            socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
-            print_log(server_address, client_addr, msg);
-            if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+            if (!b_is_barrier)
+            {
+                string msg;
+                memory_mutex.lock();
+                vector<string> cards_on_table_loc{cards_on_table};
+                timeout_copy = timeout;
+                memory_mutex.unlock();
+                socket_write = senders::send_trick(client_fd, current_trick, cards_on_table_loc, msg);
+                print_log(server_address, client_addr, msg);
+                if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
+            }
         }
-        else if (poll_result < 0)
+        else if (poll_result <= 0)
         {
             close_thread("Failed to poll.", {client_fd}, seat, true);
             return -1;  
@@ -723,77 +827,13 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 socket_read = common::read_from_socket(client_fd, client_message);
                 print_log(client_addr, server_address, client_message);
                 if (assert_client_read_socket(socket_read, {client_fd}, seat, true) < 0) {return -1;}
-                if (regex::TRICK_client_check(client_message, current_trick))
+                if (b_is_barrier)
                 {
-                    if (b_was_destined_to_play)
-                    {
-                        // Set current message;
-                        memory_mutex.lock();
-                        timeout_copy = timeout;
-                        if (current_trick < 10) {client_message = client_message.substr(6, client_message.size() - 8);}
-                        else {client_message = client_message.substr(7, client_message.size() - 9);}
-                        // Check if the client has the card.
-                        auto received_card = find(cards[seats_to_array[seat]].begin(), cards[seats_to_array[seat]].end(), client_message);
-                        bool b_played_right_color = true;
-                        if(cards_on_table.size() > 0)
-                        {
-                            char main_color = cards_on_table[0][cards_on_table[0].size() - 1];
-                            b_played_right_color = (main_color == client_message[client_message.size() - 1]);
-                            if (!b_played_right_color) 
-                            {
-                                b_played_right_color = true;
-                                // Didn't play the right color. Check if he had it.
-                                for (const string& card : cards[seats_to_array[seat]])
-                                {
-                                    if (card[card.size() - 1] == main_color)
-                                    {
-                                        b_played_right_color = false;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (received_card == cards[seats_to_array[seat]].end() || !b_played_right_color)
-                        {
-                            if (received_card == cards[seats_to_array[seat]].end()) {print_error("Client send a card he didn't have.");}
-                            else {print_error("Client send a card with a wrong color.");}
-                            memory_mutex.unlock();
-                            // Client send something he didn't have; send back wrong.
-                            string msg;
-                            socket_write = senders::send_wrong(client_fd, current_trick, msg);
-                            print_log(server_address, client_addr, msg);
-                            if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
-                        }
-                        else
-                        {
-                            // We received a valid card. Noice.
-                            cards[seats_to_array[seat]].erase(received_card);
-                            cards_on_table.push_back(client_message);
-                            player_turn = "x";
-                            memory_mutex.unlock();
-                            // Notify server that the client played a card.
-                            pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], CARD_PLAY);
-                            if (assert_client_write_pipe(pipe_write, {client_fd}, seat, true) < 0) {return -1;}
-                            b_was_destined_to_play = false;
-                        }
-                    }
-                    else
-                    {
-                        // Client send a message out of order.
-                        string msg;
-                        socket_write = senders::send_wrong(client_fd, current_trick, msg);
-                        print_log(server_address, client_addr, msg);
-                        if (assert_client_write_socket(socket_write, {client_fd}, seat, true) < 0) {return -1;}
-                    }
-                    
+                    memory_mutex.lock();
+                    barrier_messages[seats_to_array[seat]].push(client_message);
+                    memory_mutex.unlock();
                 }
-                else
-                {
-                    // Invalid message, close the connection.
-                    close_thread("Client send invalid message.", {client_fd}, seat, true);
-                    return -1;
-                }
+                else if (parse_message(client_message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
             }
             else if (b_was_destined_to_play)
             {
@@ -884,6 +924,7 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                 else if (server_message == BARRIER_RESPONSE)
                 {
                     // Barrier response.
+                    b_is_barrier = true;
                     memory_mutex.lock();
                     ++occupied;
                     int local_occ = occupied;
@@ -892,6 +933,17 @@ int Serwer::client_poll(int client_fd, const string& seat, const struct sockaddr
                     {
                         pipe_write = common::write_to_pipe(server_read_pipes[seats_to_array[seat]][1], BARRIER_RESPONSE);
                         if (assert_client_write_pipe(pipe_write, {client_fd}, seat, true) < 0) {return -1;}
+                    }
+                }
+                else if (server_message == BARRIER_END)
+                {
+                    b_is_barrier = false;
+                    cout << "Barrier end.\n";
+                    while (barrier_messages[seats_to_array[seat]].size() > 0)
+                    {
+                        string message{ barrier_messages[seats_to_array[seat]].front() };
+                        barrier_messages[seats_to_array[seat]].pop();
+                        if (parse_message(message, client_fd, seat, client_addr, b_was_destined_to_play, current_trick) < 0) {return -1;}
                     }
                 }
                 else
@@ -911,11 +963,12 @@ void Serwer::handle_client(int client_fd, struct sockaddr_in6 client_addr, uint6
 {
     string seat;
     bool b_is_my_turn = false;
+    bool b_is_barrier = false;
     // Reserve a spot at the table.
     cout << "Hello. I'm thread " << thread_id << ".\n";
-    if (reserve_spot(client_fd, seat, client_addr, b_is_my_turn) > 0) 
+    if (reserve_spot(client_fd, seat, client_addr, b_is_my_turn, b_is_barrier) > 0) 
     {   
-        client_poll(client_fd, seat, client_addr, b_is_my_turn);
+        client_poll(client_fd, seat, client_addr, b_is_my_turn, b_is_barrier);
     }
     memory_mutex.lock();
     joinable_threads.push_back(thread_id);
