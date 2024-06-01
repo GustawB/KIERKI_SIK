@@ -316,7 +316,7 @@ int Serwer::start_game()
 }
 
 
-int Serwer::run_deal(int32_t trick_type, const string& seat)
+int Serwer::run_deal(int16_t trick_type, const string& seat)
 {
     memory_mutex.lock();
     trick_type_global = trick_type;
@@ -563,7 +563,7 @@ void Serwer::handle_connections()
     }
 }
 
-int Serwer::reserve_spot(int client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier)
+int Serwer::reserve_spot(int32_t client_fd, string& seat, const struct sockaddr_in6& client_addr, bool& b_is_my_turn, bool& b_is_barrier)
 {
     // Read the message from the client.
     string message;
