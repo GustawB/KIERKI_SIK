@@ -21,7 +21,11 @@ void Klient::close_main_sockets(ssize_t result,
 {
     if (error_message != "") { print_error(error_message); }
     // Close my ends of pipes.
-    if (result == 1) { interaction_thread.join(); }
+    if (result == 1) 
+    {   
+        try { interaction_thread.join(); }
+        catch (const system_error& e) { print_error(e.what()); }
+    }
     close_pipe_sockets();
 }
 
@@ -250,8 +254,16 @@ int16_t Klient::prepare_client()
     
     if (ip_version == 4) { print_log(client_address, server_address, msg); }
     else { print_log(client6_address, server6_address, msg); } 
-
-    interaction_thread = thread(&Klient::handle_client, this, socket_fd);
+    try 
+    {
+        interaction_thread = thread(&Klient::handle_client, this, socket_fd);
+    }
+    catch (const system_error& e)
+    {
+        print_error(e.what());
+        common::assert_close(socket_fd);
+        return -1;
+    }
     return socket_fd; 
 }
 
