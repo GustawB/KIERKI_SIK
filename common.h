@@ -2,6 +2,7 @@
 #define COMMON_H
 
 #include <string>
+#include <cstring>
 #include <iostream>
 #include <unistd.h>
 #include <sys/socket.h>
