@@ -14,19 +14,22 @@ bool regex::BUSY_check(const std::string& s)
 
 bool regex::DEAL_check(const std::string& s)
 {
-    boost::regex DEAL_regex("^DEAL[1-7][NESW](([2-9]|1[0]|J|Q|K|A)[CDHS]){13}\\r\\n$");
+    boost::regex DEAL_regex
+        ("^DEAL[1-7][NESW](([2-9]|1[0]|J|Q|K|A)[CDHS]){13}\\r\\n$");
     return boost::regex_match(s, DEAL_regex);
 }
   
 bool regex::TRICK_check(const std::string& s, int16_t trick_nr)
 {
-    boost::regex TRICK_regex("^TRICK" + to_string(trick_nr) + "(([2-9]|1[0]|J|Q|K|A)[CDHS]){0,3}\\r\\n$");
+    boost::regex TRICK_regex("^TRICK" + to_string(trick_nr) + 
+        "(([2-9]|1[0]|J|Q|K|A)[CDHS]){0,3}\\r\\n$");
     return regex_match(s, TRICK_regex);
 }
 
 bool regex::TRICK_client_check(const std::string& s, int16_t trick_nr)
 {
-    boost::regex TRICK_regex("^TRICK" + to_string(trick_nr) + "([2-9]|1[0]|J|Q|K|A)[CDHS]\\r\\n$");
+    boost::regex TRICK_regex("^TRICK" + to_string(trick_nr) + 
+        "([2-9]|1[0]|J|Q|K|A)[CDHS]\\r\\n$");
     return boost::regex_match(s, TRICK_regex);
 }
 
@@ -38,7 +41,8 @@ bool regex::WRONG_check(const std::string& s)
 
 bool regex::TAKEN_check(const std::string& s)
 {
-    boost::regex TAKEN_regex("^TAKEN([1-9]|1[0-3])(([2-9]|1[0]|J|Q|K|A)[CDHS]){4}[NESW]\\r\\n$");
+    boost::regex TAKEN_regex
+        ("^TAKEN([1-9]|1[0-3])(([2-9]|1[0]|J|Q|K|A)[CDHS]){4}[NESW]\\r\\n$");
     return boost::regex_match(s, TAKEN_regex);
 }
 
@@ -70,14 +74,16 @@ std::vector<std::string> regex::extract_cards(const std::string& s)
 std::string regex::extract_trick_nr(const std::string& s)
 {
     boost::regex trick_nr_regex("TRICK(?:[1-9]|1[0-3])");
-    boost::sregex_iterator trick_nr_iterator(s.begin(), s.end(), trick_nr_regex);
+    boost::sregex_iterator trick_nr_iterator(s.begin(),
+        s.end(), trick_nr_regex);
     return trick_nr_iterator->str();
 }
 
 std::vector<std::string> regex::extract_seat_score(const std::string& s)
 {
     boost::regex seat_score_regex("([NESW]\\d+)");
-    boost::sregex_iterator seat_score_iterator(s.begin(), s.end(), seat_score_regex);
+    boost::sregex_iterator seat_score_iterator(s.begin(), s.end(),
+        seat_score_regex);
     boost::sregex_iterator end;
     std::vector<std::string> seat_scores;
     for (; seat_score_iterator != end; ++seat_score_iterator)
