@@ -249,8 +249,6 @@ int16_t Serwer::barrier()
         poll_descriptors[i].events = POLLIN;
     }
 
-    bool b_received_card = false;
-
     while(waiting > 0)
     {
         for (int16_t i = 0; i < 5; ++i) {poll_descriptors[i].revents = 0;}
@@ -287,11 +285,6 @@ int16_t Serwer::barrier()
                             return -1;
                         }
                     }
-                    else if (wake_msg == CARD_PLAY)
-                    {
-                        // Client played a card.
-                        b_received_card = true;
-                    }
                     else if (wake_msg != BARRIER_RESPONSE &&
                         wake_msg != DISCONNECTED) 
                     {
@@ -315,7 +308,7 @@ int16_t Serwer::barrier()
         if (assert_server_write_pipe(pipe_write) < 0) {return -1;}
     }
 
-    return b_received_card;
+    return 0;
 }
 
 int16_t Serwer::start_game()
@@ -466,10 +459,6 @@ int16_t Serwer::run_deal(int16_t trick_type, const string& seat)
                                     // Wait for threads.
                                     int16_t result = barrier();
                                     if (result < 0) {return -1;}
-                                    else if (result > 0)
-                                    {
-                                        b_received_card = true;
-                                    }
                                 }
                             }
                             else
