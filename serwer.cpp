@@ -177,7 +177,7 @@ int16_t Serwer::close_server(const string& error_message = "")
             ("Failed to close connection thread.");}
         
         try { connection_manager_thread.join(); }
-        catch (const std::system_error& e) 
+        catch (const system_error& e) 
         {
             print_error(e.what());
             b_did_something_fail = true;
@@ -205,7 +205,7 @@ int16_t Serwer::close_server(const string& error_message = "")
         iter != client_threads.end(); ++iter)
     {
         try { iter->second.join(); }
-        catch (const std::system_error& e) 
+        catch (const system_error& e) 
         {
             print_error(e.what());
             b_did_something_fail = true;
@@ -348,7 +348,15 @@ int16_t Serwer::start_game()
     }
 
     // TODO Try catch this motherfucker.
-    connection_manager_thread = thread(&Serwer::handle_connections, this);
+    try
+    {
+        connection_manager_thread = thread(&Serwer::handle_connections, this);
+    }
+    catch (const system_error& e)
+    {
+        close_server(e.what());
+        return 1;
+    }
 
     if (barrier() < 0) {return 1;}
     return 0;
@@ -446,8 +454,15 @@ int16_t Serwer::run_deal(int16_t trick_type, const string& seat)
                                 {
                                     // Connection thread. Recreate the fucker.
                                     connection_manager_thread.join();
-                                    connection_manager_thread = thread
+                                    try
+                                    {
+                                        connection_manager_thread = thread
                                         (&Serwer::handle_connections, this);
+                                    }
+                                    catch (const system_error& e)
+                                    {
+                                        close_server(e.what());
+                                    }
                                 }
                                 else
                                 {
@@ -594,7 +609,7 @@ void Serwer::handle_connections()
                             this, client_fd, client_address, thread_id);
                         client_threads[thread_id] = move(client_thread); 
                     }
-                    catch (const std::system_error& e) 
+                    catch (const system_error& e) 
                     {
                         memory_mutex.unlock();
                         close_thread(e.what(), {socket_fd, client_fd},

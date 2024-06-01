@@ -33,6 +33,7 @@ using std::cout;
 using std::map;
 using std::find;
 using std::initializer_list;
+using std::system_error;
 
 using poll_size = vector<struct pollfd>::size_type;
 
