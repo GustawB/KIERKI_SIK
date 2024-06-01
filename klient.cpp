@@ -191,27 +191,6 @@ int16_t Klient::prepare_client()
     if (ip_version == 4) { socket_fd = common::create_socket(); }
     else { socket_fd = common::create_socket6(); }
     if (socket_fd < 0) { return -1; }
-/*
-    if (ip_version == 4)
-    {
-        if (bind(socket_fd, (struct sockaddr *) &client_address, (socklen_t) sizeof(client_address)) < 0)
-        {
-            common::print_error("Failed to bind client socket.");
-            close(socket_fd);
-            close_pipe_sockets();
-            return -1;
-        }
-    }
-    else
-    {
-        if (bind(socket_fd, (struct sockaddr *) &client6_address, (socklen_t) sizeof(client6_address)) < 0)
-        {
-            common::print_error("Failed to bind client socket.");
-            close(socket_fd);
-            close_pipe_sockets();
-            return -1;
-        }
-    }*/
 
     if (ip_version == 4) 
     {
@@ -264,7 +243,7 @@ int16_t Klient::prepare_client()
         common::assert_close(socket_fd);
         return -1;
     }
-    return socket_fd; 
+    return socket_fd;
 }
 
 int16_t Klient::run_client()
@@ -480,9 +459,9 @@ void Klient::handle_client(int32_t socket_fd)
                     trick_number = 1;
                     got_score = false;
                     got_total = false;
+                    if (!is_ai) { client_printer::print_deal(message); }
                     message = message.substr(6, message.size() - 8);
                     my_cards = regex::extract_cards(message);
-                    if (!is_ai) { client_printer::print_deal(message); }
                     access_mutex.unlock();
                 }
                 else if (regex::WRONG_check(message))

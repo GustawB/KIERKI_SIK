@@ -130,7 +130,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    struct addrinfo *address_result = nullptr;
+    struct addrinfo *address_result;
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
@@ -143,7 +143,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
 
     server_address.sin6_family = AF_INET6;   // IPv6
     server_address.sin6_addr = ((struct sockaddr_in6 *)
-    (address_result->ai_addr))->sin6_addr;
+        (address_result->ai_addr))->sin6_addr;
     server_address.sin6_port = htons(port); // port from the command line
 
     freeaddrinfo(address_result);
@@ -205,7 +205,17 @@ int32_t common::setup_server_socket(int32_t port, int32_t queue_size,
         &optval, sizeof(optval)) < 0) 
     {
         print_error("Failed to set socket options.");
-        close(server_fd);
+        assert_close(server_fd);
+        return 1;
+    }
+
+    optval = 0;
+    // Set the IPV6_V6ONLY option to false.
+    if (setsockopt(server_fd, IPPROTO_IPV6, IPV6_V6ONLY,
+        &optval, sizeof(optval)) == -1)
+    {
+        print_error("Failed to set socket options.");
+        assert_close(server_fd);
         return 1;
     }
 
@@ -219,12 +229,14 @@ int32_t common::setup_server_socket(int32_t port, int32_t queue_size,
         sizeof(server_addr)) == -1)
     {
         print_error("Failed to bind server socket.");
+        assert_close(server_fd);
         return -1;
     }
 
     if (listen(server_fd, queue_size) == -1)
     {
         print_error("Failed to listen on server socket.");
+        assert_close(server_fd);
         return -1;
     }
 

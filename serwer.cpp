@@ -273,10 +273,8 @@ int16_t Serwer::barrier()
                     if (assert_server_read_pipe(pipe_read) <= 0) {return -1;}
                     if (wake_msg == DISCONNECTED && i == 4)
                     {
-                        // Connection thread run away.
-                        connection_manager_thread.join();
-                        connection_manager_thread = 
-                            thread(&Serwer::handle_connections, this);
+                        close_server("Connection thread failed.");
+                        return -1;
                     }
                     else if (wake_msg == DISCONNECTED)
                     {
@@ -347,7 +345,6 @@ int16_t Serwer::start_game()
         }
     }
 
-    // TODO Try catch this motherfucker.
     try
     {
         connection_manager_thread = thread(&Serwer::handle_connections, this);
