@@ -538,7 +538,7 @@ int16_t Serwer::run_game()
 
     return close_server();
 }
-
+// TODO Add POLERR to polls.
 void Serwer::handle_connections()
 {
     // Create a socket.

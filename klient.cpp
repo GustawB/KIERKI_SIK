@@ -124,7 +124,7 @@ int16_t Klient::assert_client_write_pipe(ssize_t result,
 void Klient::print_log(const struct sockaddr_in6& src_addr,
     const struct sockaddr_in6& dest_addr, const string& message)
 {
-    if (is_ai)
+    if (is_ai && message != "")
     {
         access_mutex.lock();
         common::print_log(src_addr, dest_addr, message);
@@ -135,7 +135,7 @@ void Klient::print_log(const struct sockaddr_in6& src_addr,
 void Klient::print_log(const struct sockaddr_in& src_addr,
     const struct sockaddr_in& dest_addr, const string& message)
 {
-    if (is_ai)
+    if (is_ai && message != "")
     {
         access_mutex.lock();
         common::print_log(src_addr, dest_addr, message);
@@ -230,7 +230,7 @@ int16_t Klient::prepare_client()
         common::assert_close(socket_fd);
         return -1;
     }
-    
+
     if (ip_version == 4) { print_log(client_address, server_address, msg); }
     else { print_log(client6_address, server6_address, msg); } 
     try 

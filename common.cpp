@@ -101,7 +101,7 @@ ssize_t common::get_server_ipv4_addr(char const *host, int32_t port,
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    struct addrinfo *address_result;
+    struct addrinfo *address_result = nullptr;
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
@@ -130,7 +130,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    struct addrinfo *address_result;
+    struct addrinfo *address_result = nullptr;
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
@@ -160,7 +160,7 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    struct addrinfo *address_result;
+    struct addrinfo *address_result = nullptr;
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {

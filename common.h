@@ -9,7 +9,6 @@
 #include <netinet/in.h>
 #include <exception>
 #include <chrono>
-#include <format>
 #include <iomanip>
 #include <sstream>
 #include <arpa/inet.h>
