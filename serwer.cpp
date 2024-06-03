@@ -293,6 +293,11 @@ int16_t Serwer::barrier()
                         return -1;
                     }
                 }
+                else if (poll_descriptors[i].revents & POLLERR)
+                {
+                    close_server("Poll error in barrier poll.");
+                    return -1;
+                }
             }
         }
         memory_mutex.lock();
@@ -469,6 +474,11 @@ int16_t Serwer::run_deal(int16_t trick_type, const string& seat)
                                 return -1;
                             }
                         }
+                        else if (poll_descriptors[j].revents & POLLERR)
+                        {
+                            close_server("Poll error in main game server poll.");
+                            return -1;
+                        }
                     }
                 }
             }
@@ -606,6 +616,12 @@ void Serwer::handle_connections()
                     memory_mutex.unlock();
                 }
             }
+            else if (poll_descriptors[0].revents & POLLERR)
+            {
+                close_thread("Poll error on server socket.", {socket_fd},
+                    CONNECTIONS_THREAD, false);
+                return;
+            }
 
             // Handle the server.
             if (poll_descriptors[1].revents & POLLIN)
@@ -627,6 +643,12 @@ void Serwer::handle_connections()
                     close_fds("Server send invalid message.", {socket_fd});
                     return;
                 }
+            }
+            else if (poll_descriptors[1].revents & POLLERR)
+            {
+                close_thread("Poll error on server pipe.", {socket_fd},
+                    CONNECTIONS_THREAD, false);
+                return;
             }
         }
     }
@@ -946,6 +968,12 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     client_addr, b_was_destined_to_play, current_trick,
                     timeout_copy) < 0) {return -1;}
             }
+            else if (poll_descriptors[0].revents & POLLERR)
+            {
+                close_thread("Poll error on client socket.", {client_fd},
+                    seat, true);
+                return -1;
+            }
             else if (b_was_destined_to_play)
             {
                 // Update timeout; if <= 0, resend a request for a card.
@@ -1084,6 +1112,12 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                         {client_fd}, seat, true);
                     return -1;
                 }
+            }
+            else if (poll_descriptors[1].revents & POLLERR)
+            {
+                close_thread("Poll error on server pipe.", {client_fd},
+                    seat, true);
+                return -1;
             }
         }
     }
