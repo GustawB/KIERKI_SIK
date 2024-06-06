@@ -177,7 +177,6 @@ int16_t Klient::prepare_client()
         if (result < 0) { return -1; }
         else if (result == 0) { ip_version = 4; }
         else { ip_version = 6; }
-        cout << "IP version: " << ip_version << '\n';
     }
  
     if (result < 0)
@@ -549,7 +548,7 @@ void Klient::handle_client(int32_t socket_fd)
                     }
                 }
                 // else: ignore messages.
-                else { cout << "KURWO JEBANA\n";}
+                else { access_mutex.unlock(); }
             }
             else if(poll_fds[1].revents & POLLERR)
             {

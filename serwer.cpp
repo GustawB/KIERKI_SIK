@@ -801,9 +801,6 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
                 extracted_trick = stoi(message.substr(5, 2));
                 message = message.substr(7, message.size() - 9);
             }
-            cout << "Extracted trick: " << extracted_trick << std::endl;
-            cout << "Current trick: " << current_trick << std::endl;
-            cout << "Message: " << message << std::endl;
             // Check if the client has the card.
             auto received_card = find(cards[seats_to_array[seat]]
                 .begin(), cards[seats_to_array[seat]].end(), message);
