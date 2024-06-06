@@ -783,21 +783,29 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
     ssize_t socket_write = -1;
     ssize_t pipe_write = -1;
     print_log(client_addr, server_address, message);
-    if (regex::TRICK_client_check(message, current_trick))
+    if (regex::TRICK_client_check(message))
     {
         if (b_was_destined_to_play)
         {
             // Set current message;
             memory_mutex.lock();
             timeout_copy = timeout;
-            if (current_trick < 10) { message = message
-                .substr(6, message.size() - 8);}
-            else { message = message.substr(7, message.size() - 9);}
+            int16_t extracted_trick = -1;
+            if (current_trick < 10) 
+            { 
+                extracted_trick = stoi(message.substr(5, 1));
+                message = message.substr(6, message.size() - 8);
+            }
+            else 
+            {
+                extracted_trick = stoi(message.substr(5, 2));
+                message = message.substr(7, message.size() - 9);
+            }
             // Check if the client has the card.
             auto received_card = find(cards[seats_to_array[seat]]
                 .begin(), cards[seats_to_array[seat]].end(), message);
-            bool b_played_right_color = true;
-            if(cards_on_table.size() > 0)
+            bool b_played_right_color = (extracted_trick == current_trick);
+            if(cards_on_table.size() > 0 && b_played_right_color)
             {
                 char main_color = cards_on_table[0]
                     [cards_on_table[0].size() - 1];
@@ -827,7 +835,14 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
                 }
                 else
                 {
-                    print_error("Client send a card with a wrong color.");
+                    if (extracted_trick != current_trick)
+                    {
+                        print_error("Client send a card with a wrong trick.");
+                    }
+                    else
+                    {
+                        print_error("Client send a card with a wrong color.");
+                    }
                 }
                 memory_mutex.unlock();
                 // Client send something he didn't have; send back wrong.

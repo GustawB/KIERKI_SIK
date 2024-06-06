@@ -19,7 +19,7 @@ namespace regex
     bool BUSY_check(const string& s);
     bool DEAL_check(const string& s);
     bool TRICK_check(const string& s, int16_t trick_nr);
-    bool TRICK_client_check(const string& s, int16_t trick_nr);
+    bool TRICK_client_check(const string& s);
     bool WRONG_check(const string& s);
     bool TAKEN_check(const string& s);
     bool SCORE_check(const string& s);

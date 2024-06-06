@@ -26,10 +26,10 @@ bool regex::TRICK_check(const std::string& s, int16_t trick_nr)
     return regex_match(s, TRICK_regex);
 }
 
-bool regex::TRICK_client_check(const std::string& s, int16_t trick_nr)
+bool regex::TRICK_client_check(const std::string& s)
 {
-    boost::regex TRICK_regex("^TRICK" + to_string(trick_nr) + 
-        "([2-9]|1[0]|J|Q|K|A)[CDHS]\\r\\n$");
+    boost::regex TRICK_regex
+        ("^TRICK([1-9]|1[0-3])([2-9]|1[0]|J|Q|K|A)[CDHS]\\r\\n$");
     return boost::regex_match(s, TRICK_regex);
 }
 

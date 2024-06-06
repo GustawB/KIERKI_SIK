@@ -34,6 +34,7 @@ using std::map;
 using std::find;
 using std::initializer_list;
 using std::system_error;
+using std::stoi;
 
 using poll_size = vector<struct pollfd>::size_type;
 
