@@ -48,10 +48,11 @@ void client_printer::print_wrong(int16_t trick_nr)
     cout << "Wrong message received in trick " << trick_nr << ".\n";
 }
 
-void client_printer::print_taken(const std::string& s)
+void client_printer::print_taken(const std::string& s, int16_t trick_nr)
 {
-    char trick_nr = s[5];
-    string cards = s.substr(6, s.size() - 9);
+    string cards;
+    if (trick_nr < 10) { cards = s.substr(6, s.size() - 9); }
+    else { cards = s.substr(7, s.size() - 10); }
     char taker = s[s.size() - 3];
     cout << "A trick " << trick_nr << " is taken by " << taker << ", cards";
     bool b_is_first = true;

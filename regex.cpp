@@ -39,10 +39,11 @@ bool regex::WRONG_check(const std::string& s)
     return boost::regex_match(s, WRONG_regex);
 }
 
-bool regex::TAKEN_check(const std::string& s)
+bool regex::TAKEN_check(const std::string& s, int16_t trick_nr)
 {
     boost::regex TAKEN_regex
-        ("^TAKEN([1-9]|1[0-3])(([2-9]|1[0]|J|Q|K|A)[CDHS]){4}[NESW]\\r\\n$");
+        ("^TAKEN" + to_string(trick_nr) + 
+        "(([2-9]|1[0]|J|Q|K|A)[CDHS]){4}[NESW]\\r\\n$");
     return boost::regex_match(s, TAKEN_regex);
 }
 

@@ -459,6 +459,7 @@ void Klient::handle_client(int32_t socket_fd)
                     trick_number = 1;
                     got_score = false;
                     got_total = false;
+                    taken_tricks.clear();
                     if (!is_ai) { client_printer::print_deal(message); }
                     message = message.substr(6, message.size() - 8);
                     my_cards = regex::extract_cards(message);
@@ -469,9 +470,9 @@ void Klient::handle_client(int32_t socket_fd)
                     if (!is_ai) { client_printer::print_wrong(trick_number); }
                     access_mutex.unlock();
                 }
-                else if (regex::TAKEN_check(message))
+                else if (regex::TAKEN_check(message, trick_loc))
                 {
-                    if (!is_ai) { client_printer::print_taken(message); }
+                    if (!is_ai) { client_printer::print_taken(message, trick_loc); }
                     string cards;
                     char taker = message[message.size() - 3];
                     if (trick_number < 10) 

@@ -790,15 +790,20 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
             // Set current message;
             memory_mutex.lock();
             timeout_copy = timeout;
-            int16_t extracted_trick = stoi(message.substr(5, 2));
-            if (extracted_trick < 10) 
-            { 
+            int16_t extracted_trick = -1;
+            if (current_trick < 10) 
+            {
+                extracted_trick = stoi(message.substr(5, 1));
                 message = message.substr(6, message.size() - 8);
             }
             else 
             {
+                extracted_trick = stoi(message.substr(5, 2));
                 message = message.substr(7, message.size() - 9);
             }
+            cout << "Extracted trick: " << extracted_trick << std::endl;
+            cout << "Current trick: " << current_trick << std::endl;
+            cout << "Message: " << message << std::endl;
             // Check if the client has the card.
             auto received_card = find(cards[seats_to_array[seat]]
                 .begin(), cards[seats_to_array[seat]].end(), message);
