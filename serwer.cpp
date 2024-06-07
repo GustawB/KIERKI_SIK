@@ -26,6 +26,11 @@ void Serwer::print_log(const struct sockaddr_in6& src_addr,
     {
         print_mutex.lock();
         common::print_log(src_addr, dest_addr, message);
+        if (message.size() < 2 || 
+            message.substr(message.size() - 3, 2) != "\r\n")
+        {
+            cout << "\n";
+        }
         print_mutex.unlock();
     }
 }

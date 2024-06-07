@@ -129,6 +129,11 @@ void Klient::print_log(const struct sockaddr_in6& src_addr,
     {
         access_mutex.lock();
         common::print_log(src_addr, dest_addr, message);
+        if (message.size() < 2 || 
+            message.substr(message.size() - 3, 2) != "\r\n")
+        {
+            cout << "\n";
+        }
         access_mutex.unlock();
     }
 }
@@ -140,6 +145,11 @@ void Klient::print_log(const struct sockaddr_in& src_addr,
     {
         access_mutex.lock();
         common::print_log(src_addr, dest_addr, message);
+        if (message.size() < 2 || 
+            message.substr(message.size() - 3, 2) != "\r\n")
+        {
+            cout << "\n";
+        }
         access_mutex.unlock();
     }
 }
