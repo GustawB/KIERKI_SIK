@@ -14,12 +14,15 @@ int16_t parser::parse_server_args(int argc, char* argv[], int32_t& port,
     try 
     {
         po::options_description desc("Allowed options");
+        po::positional_options_description pDesc;
         desc.add_options()
             (",p", po::value<vector<int32_t>>()->multitoken(), "port number")
             (",f", po::value<vector<string>>()->multitoken(), "game file name")
             (",t", po::value<vector<int32_t>>()->multitoken(), "timeout");
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::store(po::command_line_parser(argc, argv)
+            .options(desc).positional(pDesc).run(), vm);
         po::notify(vm);
 
         if (vm.count("-p")) 
@@ -99,8 +102,9 @@ int16_t parser::parse_client_args(int argc, char* argv[], string& host,
             
 
         po::variables_map vm;
+        po::positional_options_description pDesc;
         po::store(po::command_line_parser(argc, argv).options(desc)
-            .extra_parser(reg_additional_options).run(), vm);
+            .extra_parser(reg_additional_options).positional(pDesc).run(), vm);
         po::notify(vm);
 
         if (!vm.count("-h")) 
