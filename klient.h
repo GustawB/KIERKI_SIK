@@ -99,28 +99,6 @@ private:
         int32_t socket_fd, bool is_main);
 
     /*
-    * Wrapper for common::print_log() that will acquire mutex to have 
-    * exclusive access to the standard stream.
-    * Overload for IPv4 addresses.
-    */
-    void print_log(const struct sockaddr_in6& src_addr,
-        const struct sockaddr_in6& dest_addr, const string& message);
-
-    /*
-    * Wrapper for common::print_log() that will acquire mutex to have
-    * exclusive access to the standard stream.
-    * Overload for IPv6 addresses.
-    */
-    void print_log(const struct sockaddr_in& src_addr,
-        const struct sockaddr_in& dest_addr, const string& message);
-
-    /*
-    * Wrapper for common::print_error() that will acquire mutex to have
-    * exclusive access to the error stream.
-    */
-    void print_error(const string& message);
-
-    /*
     * Utility function to get the server socket. Depending on the IP version,
     * it will create either IPv4 or IPv6 socket. On soccess, it will return
     * the socket file descriptor. On failure, it will return -1.
@@ -138,6 +116,12 @@ private:
     * to play in the current trick if the client is AI.
     */
     string strategy(const string& color);
+
+    /*
+    * Wrapper for the common::print_log functions,
+    * that decides which overload to call.
+    */
+    void print_logs(const string& message);
 
     struct sockaddr_in server_address;
     struct sockaddr_in6 server6_address;

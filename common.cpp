@@ -1,5 +1,97 @@
 #include "common.h"
 
+std::string get_time()
+{
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm now_tm;
+    localtime_r(&now_c, &now_tm);
+    auto ms = std::chrono::duration_cast<std::chrono
+        ::milliseconds>(now.time_since_epoch()) % 1000;
+    std::stringstream ss;
+    ss << std::put_time(&now_tm, "%Y-%m-%dT%H:%M:%S");
+    ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
+    return ss.str();
+}
+
+void log(const struct sockaddr_in& source_addr,
+    const struct sockaddr_in& dest_addr, const string& message)
+{
+    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" 
+        << ntohs(source_addr.sin_port);
+    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" 
+        << ntohs(dest_addr.sin_port) << ",";
+    cout << get_time() << "] " << message;
+    cout.flush();
+}
+
+void log(const struct sockaddr_in6& source_addr,
+    const struct sockaddr_in6& dest_addr, const string& message)
+{
+    char* str = (char*)malloc(INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET6, &source_addr.sin6_addr, str, INET6_ADDRSTRLEN);
+    string src{str};
+    inet_ntop(AF_INET6, &dest_addr.sin6_addr, str, INET6_ADDRSTRLEN);
+    string dest{str};
+    free(str);
+
+    cout << "[" << src << ":" << ntohs(source_addr.sin6_port);
+    cout << "," << dest << ":" << ntohs(dest_addr.sin6_port) << ",";
+    cout << get_time() << "] " << message;
+    cout.flush();
+}
+
+void common::print_log(const struct sockaddr_in6& src_addr,
+    const struct sockaddr_in6& dest_addr, const string& message,
+    mutex& log_mutex, bool is_ai)
+{
+    if (is_ai && message != "")
+    {
+        log_mutex.lock();
+        log(src_addr, dest_addr, message);
+        if (message.size() < 2 || 
+            message.substr(message.size() - 2, 2) != "\r\n")
+        {
+            cout << "\n";
+        }
+        log_mutex.unlock();
+    }
+}
+
+void common::print_log(const struct sockaddr_in& src_addr,
+    const struct sockaddr_in& dest_addr, const string& message,
+    mutex& log_mutex, bool is_ai)
+{
+    if (is_ai && message != "")
+    {
+        log_mutex.lock();
+        log(src_addr, dest_addr, message);
+        if (message.size() < 2 || 
+            message.substr(message.size() - 2, 2) != "\r\n")
+        {
+            cout << "\n";
+        }
+        log_mutex.unlock();
+    }
+}
+
+void common::print_error(const string& error_message)
+{
+    cerr << "\n\tERROR: " << error_message;
+    if (errno != 0)
+    {
+        cerr << " (" << errno << ")\n";
+    }
+    else {cerr << "\n";}
+}
+
+void common::print_error(const string& message, mutex& error_mutex)
+{
+    error_mutex.lock();
+    print_error(message);
+    error_mutex.unlock();
+}
+
 ssize_t common::read_from_socket(int32_t socket_fd, string& buffer)
 {
     ssize_t bytes_read = 1;
@@ -63,31 +155,22 @@ ssize_t common::write_to_pipe(int32_t pipe_fd, const string& buffer)
 }
 
 void common::assert_close(int32_t fd)
-{
-    if (close(fd) == -1) {print_error("Failed to close file descriptor."); }
-}
 
-void common::print_error(const string& error_message)
 {
-    cerr << "\n\tERROR: " << error_message;
-    if (errno != 0)
-    {
-        cerr << " (" << errno << ")\n";
-    }
-    else {cerr << "\n";}
+    if (close(fd) == -1) { cerr << "Failed to close file descriptor.\n"; }
 }
 
 int32_t common::create_socket()
 {
     int32_t socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (socket_fd == -1) {print_error("Failed to create socket.");}
+    if (socket_fd == -1) { print_error("Failed to create socket."); }
     return socket_fd;
 }
 
 int32_t common::create_socket6()
 {
     int32_t socket_fd = socket(AF_INET6, SOCK_STREAM, 0);
-    if (socket_fd == -1) {print_error("Failed to create socket.");}
+    if (socket_fd == -1) { print_error("Failed to create socket."); }
     return socket_fd;
 }
 
@@ -276,45 +359,4 @@ int32_t common::accept_client(int32_t socket_fd,
     int32_t client_fd = accept(socket_fd, 
         (struct sockaddr*)&client_addr, &client_addr_len);
     return client_fd;
-}
-
-std::string get_time()
-{
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    std::tm now_tm;
-    localtime_r(&now_c, &now_tm);
-    auto ms = std::chrono::duration_cast<std::chrono
-        ::milliseconds>(now.time_since_epoch()) % 1000;
-    std::stringstream ss;
-    ss << std::put_time(&now_tm, "%Y-%m-%dT%H:%M:%S");
-    ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
-    return ss.str();
-}
-
-void common::print_log(const struct sockaddr_in& source_addr,
-    const struct sockaddr_in& dest_addr, const string& message)
-{
-    cout << "[" << inet_ntoa(source_addr.sin_addr) << ":" 
-        << ntohs(source_addr.sin_port);
-    cout << "," << inet_ntoa(dest_addr.sin_addr) << ":" 
-        << ntohs(dest_addr.sin_port) << ",";
-    cout << get_time() << "] " << message;
-    cout.flush();
-}
-
-void common::print_log(const struct sockaddr_in6& source_addr,
-    const struct sockaddr_in6& dest_addr, const string& message)
-{
-    char* str = (char*)malloc(INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET6, &source_addr.sin6_addr, str, INET6_ADDRSTRLEN);
-    string src{str};
-    inet_ntop(AF_INET6, &dest_addr.sin6_addr, str, INET6_ADDRSTRLEN);
-    string dest{str};
-    free(str);
-
-    cout << "[" << src << ":" << ntohs(source_addr.sin6_port);
-    cout << "," << dest << ":" << ntohs(dest_addr.sin6_port) << ",";
-    cout << get_time() << "] " << message;
-    cout.flush();
 }

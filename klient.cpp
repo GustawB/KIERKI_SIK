@@ -9,6 +9,14 @@ Klient::Klient(const string& host, int32_t port, int16_t ip,
     expected_color{"none"}
     { signal(SIGPIPE, SIG_IGN); }
 
+void Klient::print_logs(const string& msg)
+{
+    if (ip_version == 4) { common::print_log(client_address, server_address,
+        msg, access_mutex, is_ai); }
+    else { common::print_log(client6_address, server6_address, 
+        msg, access_mutex, is_ai); } 
+}
+
 void Klient::close_pipe_sockets()
 {
     common::assert_close(client_read_pipe[0]);
@@ -20,12 +28,12 @@ void Klient::close_pipe_sockets()
 void Klient::close_main_sockets(ssize_t result,
     const string& error_message = "")
 {
-    if (error_message != "") { print_error(error_message); }
+    if (error_message != "") { common::print_error(error_message); }
     // Close my ends of pipes.
     if (result == 1) 
     {   
         try { interaction_thread.join(); }
-        catch (const system_error& e) { print_error(e.what()); }
+        catch (const system_error& e) { common::print_error(e.what()); }
     }
     close_pipe_sockets();
 }
@@ -34,8 +42,8 @@ void Klient::close_worker(int32_t socket_fd, const string& error_message,
     const string& fd_msg)
 {
     ssize_t pipe_result = common::write_to_pipe(client_read_pipe[1], fd_msg);
-    if (pipe_result != 1) { print_error("Failed to notify client."); }
-    if (error_message != "") {print_error(error_message);}
+    if (pipe_result != 1) { common::print_error("Failed to notify client."); }
+    if (error_message != "") {common::print_error(error_message);}
     // Close my ends of pipes.
     common::assert_close(socket_fd);
 }
@@ -46,7 +54,7 @@ void Klient::close_main(const string& error_message, const string& fd_msg)
     ssize_t pipe_result = 0;
     if (fd_msg != DISCONNECTED) { pipe_result = 
         common::write_to_pipe(client_read_pipe[1], msg);}
-    if (pipe_result != 1) { print_error("Failed to notify worker."); }
+    if (pipe_result != 1) { common::print_error("Failed to notify worker."); }
     common::print_error(error_message);
     close_main_sockets(pipe_result);
 }
@@ -122,57 +130,18 @@ int16_t Klient::assert_client_write_pipe(ssize_t result,
     return 0;
 }
 
-void Klient::print_log(const struct sockaddr_in6& src_addr,
-    const struct sockaddr_in6& dest_addr, const string& message)
-{
-    if (is_ai && message != "")
-    {
-        access_mutex.lock();
-        common::print_log(src_addr, dest_addr, message);
-        if (message.size() < 2 || 
-            message.substr(message.size() - 3, 2) != "\r\n")
-        {
-            cout << "\n";
-        }
-        access_mutex.unlock();
-    }
-}
-
-void Klient::print_log(const struct sockaddr_in& src_addr,
-    const struct sockaddr_in& dest_addr, const string& message)
-{
-    if (is_ai && message != "")
-    {
-        access_mutex.lock();
-        common::print_log(src_addr, dest_addr, message);
-        if (message.size() < 2 || 
-            message.substr(message.size() - 3, 2) != "\r\n")
-        {
-            cout << "\n";
-        }
-        access_mutex.unlock();
-    }
-}
-
-void Klient::print_error(const string& message)
-{
-    access_mutex.lock();
-    common::print_error(message);
-    access_mutex.unlock();
-}
-
 int16_t Klient::prepare_client()
 {
     if (pipe(client_read_pipe))
     {
-        print_error("Failed to create pipes.");
+        common::print_error("Failed to create pipes.", access_mutex);
         return -1;
     }
     else if (pipe(client_write_pipe) < 0)
     {
         close(client_read_pipe[0]);
         close(client_read_pipe[1]);
-        print_error("Failed to create pipes.");
+        common::print_error("Failed to create pipes.", access_mutex);
         return -1;
     }
 
@@ -207,7 +176,7 @@ int16_t Klient::prepare_client()
         if (connect(socket_fd, (struct sockaddr *) &server_address,
                     (socklen_t) sizeof(server_address)) < 0)
         {
-            print_error("Failed to connect to server.");
+            common::print_error("Failed to connect to server.", access_mutex);
             common::assert_close(socket_fd);
             close_pipe_sockets();
             return -1;
@@ -218,7 +187,7 @@ int16_t Klient::prepare_client()
         if (connect(socket_fd, (struct sockaddr *) &server6_address,
                     (socklen_t) sizeof(server6_address)) < 0)
         {
-            print_error("Failed to connect to server.");
+            common::print_error("Failed to connect to server.", access_mutex);
             common::assert_close(socket_fd);
             close_pipe_sockets();
             return -1;
@@ -234,22 +203,22 @@ int16_t Klient::prepare_client()
         (struct sockaddr *) &client6_address, &client6_address_len); }
 
     string msg;
-    if (senders::send_iam(socket_fd, seat, msg) < 0)
+    ssize_t send_result = senders::send_iam(socket_fd, seat, msg);
+    print_logs(msg);
+    if (send_result != (ssize_t)msg.size())
     {
-        print_error("Failed to send seat name.");
+        common::print_error("Failed to send seat name.", access_mutex);
         common::assert_close(socket_fd);
         return -1;
     }
 
-    if (ip_version == 4) { print_log(client_address, server_address, msg); }
-    else { print_log(client6_address, server6_address, msg); } 
     try 
     {
         interaction_thread = thread(&Klient::handle_client, this, socket_fd);
     }
     catch (const system_error& e)
     {
-        print_error(e.what());
+        common::print_error(e.what(), access_mutex);
         common::assert_close(socket_fd);
         return -1;
     }
@@ -428,9 +397,7 @@ void Klient::handle_client(int32_t socket_fd)
                     string msg;
                     ssize_t send_result = senders::send_trick
                         (socket_fd, trick_number, {card}, msg);
-                    if (ip_version == 4) { print_log
-                        (client_address, server_address, msg); }
-                    else { print_log(client6_address, server6_address, msg); }
+                    print_logs(msg);
                     if (assert_client_write_socket
                         (send_result, msg.length(), socket_fd) < 0) { return; }
                 }
@@ -455,9 +422,7 @@ void Klient::handle_client(int32_t socket_fd)
                 string message;
                 ssize_t socket_result = 
                     common::read_from_socket(socket_fd, message);
-                if (ip_version == 4) { print_log
-                    (server_address, client_address, message); }
-                else { print_log(server6_address, client6_address, message); }
+                print_logs(message);
                 if (assert_client_read_socket
                     (socket_result, socket_fd) < 0) { return; }
                 access_mutex.lock();
@@ -564,10 +529,7 @@ void Klient::handle_client(int32_t socket_fd)
                         ssize_t send_result = senders::send_trick
                             (socket_fd, trick_number, {card_to_play}, msg);
                         access_mutex.unlock();
-                        if (ip_version == 4) { print_log
-                            (client_address, server_address, msg); }
-                        else { print_log
-                            (client6_address, server6_address, msg); } 
+                        print_logs(msg);
 
                         if (assert_client_write_socket
                             (send_result, msg.length(), socket_fd) < 0) 

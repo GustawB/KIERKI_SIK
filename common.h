@@ -11,6 +11,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <mutex>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -36,12 +37,13 @@
 #define BARRIER_END "r"
 #define DELIMETER "\r\n"
 
+using std::string;
+using std::cout;
+using std::cerr;
+using std::mutex;
+
 namespace common
 {
-    using std::string;
-    using std::cout;
-    using std::cerr;
-
     /* 
      * Read from socket until DELIMETER is found.
      * Returns number of bytes read.
@@ -128,16 +130,24 @@ namespace common
     void print_error(const string& error_message);
 
     /*
+    * Utility function to print error message.
+    * If errno is set, it will print it. Memory-safe version.
+    */
+    void print_error(const string& error_message, mutex& error_mutex);
+
+    /*
     * Utility function to print log message for IPv4 addresses.
     */
     void print_log(const struct sockaddr_in& source_addr, 
-        const struct sockaddr_in& dest_addr, const string& message);
+        const struct sockaddr_in& dest_addr, const string& message, 
+        mutex& log_mutex, bool is_ai = true);
 
     /*
     * Utility function to print log message for IPv6 addresses.
     */
     void print_log(const struct sockaddr_in6& source_addr, 
-        const struct sockaddr_in6& dest_addr, const string& message);
+        const struct sockaddr_in6& dest_addr, const string& message,
+        mutex& log_mutex, bool is_ai = true);
 } // namespace common
 
 #endif // COMMON_H

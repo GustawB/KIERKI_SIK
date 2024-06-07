@@ -60,19 +60,6 @@ public:
 
 private:
     /*
-    * Wrapper for common::print_log that uses print_mutex.
-    * Utilizes IPv6 structures to work
-    * with both IPv4 and IPv6 addresses.
-    */
-    void print_log(const struct sockaddr_in6& src_addr,
-        const struct sockaddr_in6& dest_addr, const string& message);
-
-    /*
-    * Wrapper for common::print_error that uses print_mutex.
-    */
-    void print_error(const string& message);
-
-    /*
     * Function that runs a logic for one deal.
     * Returns 0 if successful, -1 otherwise.
     */
@@ -157,7 +144,7 @@ private:
     * Utility to check if writing to socket succedeed. If not,
     * closes the thread that failed and returns -1.
     */
-    int16_t assert_client_write_socket(ssize_t result,
+    int16_t assert_client_write_socket(ssize_t result, ssize_t expected,
         const initializer_list<int32_t>& fds, const string& seat,
         bool b_was_occupying);
 
