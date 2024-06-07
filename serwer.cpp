@@ -22,9 +22,12 @@ Serwer::~Serwer() {}
 void Serwer::print_log(const struct sockaddr_in6& src_addr,
     const struct sockaddr_in6& dest_addr, const string& message)
 {
-    print_mutex.lock();
-    common::print_log(src_addr, dest_addr, message);
-    print_mutex.unlock();
+    if (message != "") 
+    {
+        print_mutex.lock();
+        common::print_log(src_addr, dest_addr, message);
+        print_mutex.unlock();
+    }
 }
 
 void Serwer::print_error(const string& message)
@@ -672,9 +675,9 @@ int16_t Serwer::reserve_spot(int32_t client_fd, string& seat,
         return -1;
     }
     ssize_t socket_read = common::read_from_socket(client_fd, message);
+    print_log(client_addr, server_address, message);
     if (assert_client_read_socket(socket_read, {client_fd},
         seat, false) < 0) {return -1;}
-    print_log(client_addr, server_address, message);
 
     // Turn off the timeout.
     timeout_val.tv_sec = 0;
@@ -706,9 +709,9 @@ int16_t Serwer::reserve_spot(int32_t client_fd, string& seat,
             {
                 socket_read = senders::send_deal(client_fd, trick_type_loc,
                     deal_starter_loc, deal[seats_to_array[seat]] , msg);
+                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_read, {client_fd},
                     seat, false) < 0) {return -1;}
-                print_log(server_address, client_addr, msg);
                 memory_mutex.lock();
                 auto trick_iter = taken_tricks.begin();
                 auto taker_iter = taken_takers.begin();
@@ -718,9 +721,9 @@ int16_t Serwer::reserve_spot(int32_t client_fd, string& seat,
                     memory_mutex.unlock();
                     socket_read = senders::send_taken(client_fd, i + 1,
                         *trick_iter, *taker_iter, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_read, {client_fd},
                         seat, false) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                     memory_mutex.lock();
                     ++trick_iter;
                     ++taker_iter;
@@ -733,9 +736,9 @@ int16_t Serwer::reserve_spot(int32_t client_fd, string& seat,
                     memory_mutex.unlock();
                     socket_read = senders::send_trick(client_fd, trick_nr_loc,
                         cards_on_table_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_read, {client_fd},
                         seat, false) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                 }
                 else {memory_mutex.unlock();}
             }
@@ -751,11 +754,11 @@ int16_t Serwer::reserve_spot(int32_t client_fd, string& seat,
             string msg;
             ssize_t socket_write = senders::send_busy(client_fd,
                 occupied_seats, msg);
+            print_log(server_address, client_addr, msg);
             if (assert_client_write_socket(socket_write, {client_fd},
                 seat, false) < 0) { return -1; }
             else 
             {
-                print_log(server_address, client_addr, msg);
                 close_fds({client_fd});
                 return 0;
             }
@@ -849,9 +852,9 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
                 string msg;
                 socket_write = senders::send_wrong(client_fd,
                     current_trick, msg);
+                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_write, {client_fd},
                     seat, true) < 0) {return -1;}
-                print_log(server_address, client_addr, msg);
             }
             else
             {
@@ -873,9 +876,9 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
             // Client send a message out of order.
             string msg;
             socket_write = senders::send_wrong(client_fd, current_trick, msg);
+            print_log(server_address, client_addr, msg);
             if (assert_client_write_socket(socket_write, {client_fd},
                 seat, true) < 0) {return -1;}
-            print_log(server_address, client_addr, msg);
         }
         
     }
@@ -952,9 +955,9 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                 memory_mutex.unlock();
                 socket_write = senders::send_trick(client_fd,
                     current_trick, cards_on_table_loc, msg);
+                print_log(server_address, client_addr, msg);
                 if (assert_client_write_socket(socket_write,
                     {client_fd}, seat, true) < 0) {return -1;}
-                print_log(server_address, client_addr, msg);
             }
         }
         else if (poll_result <= 0)
@@ -1004,9 +1007,9 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     memory_mutex.unlock();
                     socket_write = senders::send_trick
                         (client_fd, current_trick, cards_on_table_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write,
                         {client_fd}, seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                 }
             }
             
@@ -1028,9 +1031,9 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     memory_mutex.unlock();
                     socket_write = senders::send_trick(client_fd,
                         current_trick, cards_on_table_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write,
                         {client_fd}, seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                     b_was_destined_to_play = true;
                 }
                 else if(server_message == DEAL)
@@ -1044,9 +1047,9 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     memory_mutex.unlock();
                     socket_write = senders::send_deal(client_fd, trick_loc,
                         seat_loc, cards_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write, {client_fd},
                         seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                 }
                 else if (server_message == DISCONNECTED)
                 {
@@ -1064,9 +1067,9 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     string msg;
                     socket_write = senders::send_taken(client_fd,
                         current_trick, cards_on_table_loc, taker_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write,
                         {client_fd}, seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                 }
                 else if(server_message == SCORES)
                 {
@@ -1079,16 +1082,16 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
                     // Score.
                     socket_write = senders::send_score(client_fd,
                         round_scores_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write,
                         {client_fd}, seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
 
                     // Total score.
                     socket_write = senders::send_total(client_fd,
                         total_scores_loc, msg);
+                    print_log(server_address, client_addr, msg);
                     if (assert_client_write_socket(socket_write,
                         {client_fd}, seat, true) < 0) {return -1;}
-                    print_log(server_address, client_addr, msg);
                 }
                 else if (server_message == BARRIER_RESPONSE)
                 {

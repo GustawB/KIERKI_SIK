@@ -94,7 +94,6 @@ int32_t common::create_socket6()
 ssize_t common::get_server_ipv4_addr(char const *host, int32_t port,
     struct sockaddr_in& server_address)
 {
-    cout << "Getting IPv4 address.\n";
     struct addrinfo hints;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET; // IPv4
@@ -106,24 +105,35 @@ ssize_t common::get_server_ipv4_addr(char const *host, int32_t port,
     if (errcode != 0)
     {
         cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-        freeaddrinfo(address_result);
+        if (address_result != nullptr) {
+            freeaddrinfo(address_result);
+        }
         return -1;
     }
 
-    server_address.sin_family = AF_INET;   // IPv4
-    server_address.sin_addr.s_addr =       // IP address
-            ((struct sockaddr_in *) 
-            (address_result->ai_addr))->sin_addr.s_addr;
-    server_address.sin_port = htons(port); // port from the command line
+    struct addrinfo *result = address_result;
+    while (result != nullptr)
+    {
+        if (result->ai_family == AF_INET)
+        {
+            server_address.sin_family = AF_INET;   // IPv4
+            server_address.sin_addr.s_addr = ((struct sockaddr_in *)
+                (address_result->ai_addr))->sin_addr.s_addr;
+            server_address.sin_port = htons(port); // port from the cmd
+            freeaddrinfo(address_result);
+            return 0;
+        }
+        result = result->ai_next;
+    }
 
     freeaddrinfo(address_result);
-    return 0;
+    cerr << "Failed to find IPv4 address.\n";
+    return -1;
 }
 
 ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     struct sockaddr_in6& server_address)
 {
-    cout << "Getting IPv6 address.\n";
     struct addrinfo hints;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET6; // IPv6
@@ -141,13 +151,24 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
         return -1;
     }
 
-    server_address.sin6_family = AF_INET6;   // IPv6
-    server_address.sin6_addr = ((struct sockaddr_in6 *)
-        (address_result->ai_addr))->sin6_addr;
-    server_address.sin6_port = htons(port); // port from the command line
+    struct addrinfo *result = address_result;
+    while (result != nullptr)
+    {
+        if (result->ai_family == AF_INET6)
+        {
+            server_address.sin6_family = AF_INET6;   // IPv6
+            server_address.sin6_addr = ((struct sockaddr_in6 *)
+                (address_result->ai_addr))->sin6_addr;
+            server_address.sin6_port = htons(port); // port from the cmd
+            freeaddrinfo(address_result);
+            return 0;
+        }
+        result = result->ai_next;
+    }
 
     freeaddrinfo(address_result);
-    return 0;
+    cerr << "Failed to find IPv6 address.\n";
+    return -1;
 }
 
 
@@ -165,33 +186,38 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
     if (errcode != 0)
     {
         std::cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-        freeaddrinfo(address_result);
+        if (address_result != nullptr) {
+            freeaddrinfo(address_result);
+        }
         return -1;
     }
 
-    if (address_result->ai_family == AF_INET)
+    struct addrinfo *result = address_result;
+    while (result != nullptr)
     {
-        v4_addr.sin_family = AF_INET;
-        v4_addr.sin_addr.s_addr = ((struct sockaddr_in *)
-        (address_result->ai_addr))->sin_addr.s_addr;
-        v4_addr.sin_port = htons(port);
-        freeaddrinfo(address_result);
-        return 0;
-    } else if (address_result->ai_family == AF_INET6)
-    {
-        v6_addr.sin6_family = AF_INET6;
-        v6_addr.sin6_addr = ((struct sockaddr_in6 *)
-        (address_result->ai_addr))->sin6_addr;
-        v6_addr.sin6_port = htons(port);
-        freeaddrinfo(address_result);
-        return 1;
+        if (result->ai_family == AF_INET)
+        {
+            v4_addr.sin_family = AF_INET;
+            v4_addr.sin_addr.s_addr = ((struct sockaddr_in *)
+                (address_result->ai_addr))->sin_addr.s_addr;
+            v4_addr.sin_port = htons(port);
+            freeaddrinfo(address_result);
+            return 0;
+        } else if (result->ai_family == AF_INET6)
+        {
+            v6_addr.sin6_family = AF_INET6;
+            v6_addr.sin6_addr = ((struct sockaddr_in6 *)
+                (address_result->ai_addr))->sin6_addr;
+            v6_addr.sin6_port = htons(port);
+            freeaddrinfo(address_result);
+            return 1;
+        }
+        result = result->ai_next;
     }
-    else
-    {
-        std::cerr << "Unknown address family.\n";
-        freeaddrinfo(address_result);
-        return -1;
-    }
+
+    cerr << "Unknown address family.\n";
+    freeaddrinfo(address_result);
+    return -1;
 }
 
 int32_t common::setup_server_socket(int32_t port, int32_t queue_size,
