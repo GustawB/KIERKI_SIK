@@ -14,7 +14,7 @@ Serwer::Serwer(int32_t port, int32_t timeout,
     cards{}, deal{}, taken_tricks{}, taken_takers{}, last_taker{},
     player_turn{"x"}, waiting_on_barrier{0}, b_is_barrier_ongoing{false},
     barrier_messages{}
-    {}
+    { signal(SIGPIPE, SIG_IGN); }
     
 
 Serwer::~Serwer() {}
@@ -934,7 +934,7 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
         struct timeval start, end;
         if (!b_was_destined_to_play)
         {
-            poll_result =poll(&poll_descriptors[0], 2, -1);
+            poll_result = poll(&poll_descriptors[0], 2, -1);
         }
         else 
         { 

@@ -16,6 +16,7 @@
 #include <cinttypes>
 #include <poll.h>
 #include <algorithm>
+#include <signal.h>
 
 #include "common.h"
 #include "regex.h"
@@ -160,10 +161,12 @@ private:
     vector<vector<string>> taken_tricks;
 
     vector<string> my_cards;
+    vector<string> played_cards;
     int16_t trick_number;
 
     bool got_score;
     bool got_total;
+    string expected_color;
 };
 
 #endif // KLIENT_H

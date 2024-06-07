@@ -15,6 +15,7 @@
 #include <poll.h>
 #include <initializer_list>
 #include <algorithm>
+#include <signal.h>
 
 #include "common.h"
 #include "regex.h"

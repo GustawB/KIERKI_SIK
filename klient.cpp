@@ -5,8 +5,9 @@ Klient::Klient(const string& host, int32_t port, int16_t ip,
     server6_address{}, client_address{}, client6_address{}, host_name{host},
     port_number{port}, ip_version{ip}, seat{seat_name}, is_ai{AI}, 
     access_mutex{}, messages_to_send{}, taken_tricks{}, 
-    trick_number{1}, got_score{false}, got_total{false}
-    {}
+    played_cards{}, trick_number{1}, got_score{false}, got_total{false},
+    expected_color{"none"}
+    { signal(SIGPIPE, SIG_IGN); }
 
 void Klient::close_pipe_sockets()
 {
@@ -336,30 +337,29 @@ int16_t Klient::run_client()
 
 string Klient::strategy(const string& color)
 {
+    if (my_cards.size() == 0) { return ""; }
     if (color == "")
     {
-        access_mutex.lock();
         string result = my_cards[my_cards.size() - 1];
         my_cards.pop_back();
-        access_mutex.unlock();
+        played_cards.push_back(result);
         return result;
     }
 
-    access_mutex.lock();
     for (auto iter = my_cards.begin(); iter != my_cards.end(); ++iter)
     {
         if ((*iter)[iter->size() - 1] == color[0])
         {
             string result = (*iter);
             my_cards.erase(iter);
-            access_mutex.unlock();
+            played_cards.push_back(result);
             return result;
         }
     }
     
     string result = my_cards[my_cards.size() - 1];
     my_cards.pop_back();
-    access_mutex.unlock();
+    played_cards.push_back(result);
     return result;
 }
 
@@ -401,6 +401,18 @@ void Klient::handle_client(int32_t socket_fd)
                     access_mutex.lock();
                     string card = messages_to_send.front();
                     messages_to_send.pop();
+                    if (is_ai)
+                    {
+                        auto iter = find(my_cards.begin(),
+                            my_cards.end(), card);
+                        if (iter != my_cards.end() && (card[card.size() - 1] ==
+                            expected_color[0] || expected_color == ""))
+                        {
+                            my_cards.erase(iter);
+                            played_cards.push_back(card);
+                            expected_color = "none";
+                        }
+                    }
                     access_mutex.unlock();
 
                     string msg;
@@ -484,6 +496,11 @@ void Klient::handle_client(int32_t socket_fd)
                     }
                     vector<string> extracted_cards
                         {regex::extract_cards(cards)};
+                    for (const string& card : played_cards)
+                    {
+                        my_cards.push_back(card);
+                    }
+                    played_cards.clear();
                     for (const string& card : extracted_cards) 
                     {
                         auto iter = find(my_cards.begin(),
@@ -509,32 +526,34 @@ void Klient::handle_client(int32_t socket_fd)
                 }
                 else if (regex::TRICK_check(message, trick_loc))
                 {
+                    string msg_copy{message};
+                    string color;
+                    if (message.size() <= 9) { color = ""; }
+                    else
+                    {
+                        if (trick_loc < 10) { message =
+                                message.substr(6, message.size() - 8); }
+                        else { message = 
+                            message.substr(7, message.size() - 9); }
+                        string first_card
+                            {regex::extract_cards(message)[0]};
+                        color = first_card[first_card.size() - 1];
+                    }
+                    expected_color = color;
                     if (!is_ai) 
                     {
-                        client_printer::print_trick(message,
+                        client_printer::print_trick(msg_copy,
                             trick_number, my_cards);
                         access_mutex.unlock();
                     }
                     else
                     {
                         // Time to send a card back to the server.
-                        string color;
-                        access_mutex.unlock();
-                        if (message.size() <= 9) { color = ""; }
-                        else
-                        {
-                            if (trick_loc < 10) { message =
-                                 message.substr(6, message.size() - 8); }
-                            else { message = 
-                                message.substr(7, message.size() - 9); }
-                            string first_card
-                                {regex::extract_cards(message)[0]};
-                            color = first_card[first_card.size() - 1];
-                        }
                         string card_to_play = strategy(color);
                         string msg;
                         ssize_t send_result = senders::send_trick
                             (socket_fd, trick_number, {card_to_play}, msg);
+                        access_mutex.unlock();
                         if (ip_version == 4) { print_log
                             (client_address, server_address, msg); }
                         else { print_log
