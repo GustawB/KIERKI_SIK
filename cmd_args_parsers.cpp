@@ -13,16 +13,35 @@ int16_t parser::parse_server_args(int argc, char* argv[], int32_t& port,
 {
     try 
     {
+        // Manually parse command line arguments
+        vector<string> args(argv + 1, argv + argc);
+        vector<string> manual_args;
+        vector<string> seat_order;
+        vector<string> ip_order;
+        bool b_is_arg = false;
+        for (const string& arg : args)
+        {
+            if (arg[0] == '-') 
+            {
+                b_is_arg = true;
+                manual_args.push_back(arg);
+            }
+            else if (b_is_arg)
+            {
+                b_is_arg = false;
+                manual_args.push_back(arg);
+            }
+            else { throw invalid_argument("Invalid argument: " + arg); }
+        }
+
         po::options_description desc("Allowed options");
-        po::positional_options_description pDesc;
         desc.add_options()
             (",p", po::value<vector<int32_t>>()->multitoken(), "port number")
             (",f", po::value<vector<string>>()->multitoken(), "game file name")
             (",t", po::value<vector<int32_t>>()->multitoken(), "timeout");
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::store(po::command_line_parser(argc, argv)
-            .options(desc).positional(pDesc).run(), vm);
+        po::store(po::command_line_parser(argc, argv).options(desc).run(), vm);
         po::notify(vm);
 
         if (vm.count("-p")) 
@@ -34,14 +53,9 @@ int16_t parser::parse_server_args(int argc, char* argv[], int32_t& port,
             }
         }
 
-        if (vm.count("-f")) 
-        {
-            game_file_name = vm["-f"].as<vector<string>>()[0];
-        }
-        else 
-        {
-            throw invalid_argument("Game file name must be provided");
-        }
+        if (vm.count("-f")) { game_file_name = vm["-f"]
+            .as<vector<string>>()[0]; }
+        else { throw invalid_argument("Game file name must be provided"); }
 
         if (vm.count("-t")) 
         {
@@ -73,82 +87,95 @@ int16_t parser::parse_server_args(int argc, char* argv[], int32_t& port,
     return 0;
 }
 
-pair<string, string> reg_additional_options(const string& s)
-{
-    if (s.find("-4") == 0) { return make_pair("IP", string("4")); } 
-    else if (s.find("-6") == 0) { return make_pair("IP", string("6")); }
-    else if (s.find("-N") == 0) { return make_pair("seat", string("N")); } 
-    else if (s.find("-E") == 0) { return make_pair("seat", string("E")); } 
-    else if (s.find("-S") == 0) { return make_pair("seat", string("S")); } 
-    else if (s.find("-W") == 0) { return make_pair("seat", string("W")); } 
-    else if (s.find("-a") == 0) { return make_pair("AI", string("a")); } 
-    else { return make_pair(string(), string()); }
-}
+#include <boost/program_options.hpp>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <algorithm>
+
+namespace po = boost::program_options;
+using namespace std;
 
 int16_t parser::parse_client_args(int argc, char* argv[], string& host, 
     int32_t& port_number, int16_t& IP_v, string& seat, bool& is_AI)
 {
     try
     {
+        // Manually parse command line arguments
+        vector<string> args(argv + 1, argv + argc);
+        vector<string> manual_args;
+        vector<string> seat_order;
+        vector<string> ip_order;
+        bool b_is_arg = false;
+        for (const string& arg : args)
+        {
+            if (arg == "-4" || arg == "-6")
+            {
+                ip_order.push_back(arg);
+                b_is_arg = false;
+            }
+            else if (arg == "-N" || arg == "-E" || arg == "-S" || arg == "-W")
+            {
+                // Store the seat flag without the '-'
+                seat_order.push_back(arg.substr(1));
+                b_is_arg = false;
+            }
+            else if (arg[0] == '-') 
+            {
+                b_is_arg = true;
+                // Keep non-seat flags for Boost to handle
+                manual_args.push_back(arg);
+            }
+            else if (b_is_arg)
+            {
+                b_is_arg = false;
+                // Keep non-seat flags for Boost to handle
+                manual_args.push_back(arg);
+            }
+            else { throw invalid_argument("Invalid argument: " + arg); }
+        }
+
+        if (seat_order.size() > 0) {seat = seat_order[0];}
+        else {throw invalid_argument("Seat must be provided");}
+        if (ip_order.size() > 0) { IP_v = ip_order[0] == "-4" ? 4 : 6; }
+
         po::options_description desc("Allowed options");
-        vector<string> custom{};
         desc.add_options()
-            ("help", "produce help message")
             (",h", po::value<vector<string>>()->multitoken(), "host name")
             (",p", po::value<vector<int32_t>>()->multitoken(), "port number")
-            ("IP", po::value<vector<int16_t>>()->multitoken(), "IP")
-            ("seat", po::value<vector<string>>()->multitoken(), "seat")
-            ("AI", po::value<vector<string>>()->multitoken(), "AI");
-            
+            (",a", po::value<vector<bool>>()->zero_tokens()
+                ->composing(), "AI");
 
         po::variables_map vm;
-        po::positional_options_description pDesc;
-        po::store(po::command_line_parser(argc, argv).options(desc)
-            .extra_parser(reg_additional_options).positional(pDesc).run(), vm);
+        // Parse remaining arguments with Boost
+        auto parsed = po::command_line_parser(manual_args).options(desc).run();
+
+        po::store(parsed, vm);
         po::notify(vm);
 
-        if (!vm.count("-h")) 
-        {
-            throw invalid_argument("Host name must be provided");
-        }
-        else 
+        if (vm.count("-h") && !vm["-h"].as<vector<string>>().empty()) 
         {
             host = vm["-h"].as<vector<string>>()[0];
         }
-
-        if (!vm.count("-p")) 
-        {
-            throw invalid_argument("Port number must be provided");
-        }
-        else if (vm["-p"].as<vector<int32_t>>()[0] < 0) 
-        {
-            throw invalid_argument("Port number must be non-negative");
-        }
         else 
         {
+            throw invalid_argument("Host name must be provided");
+        }
+
+        if (vm.count("-p") && !vm["-p"].as<vector<int32_t>>().empty()) 
+        {
+            if (vm["-p"].as<vector<int32_t>>()[0] < 0) 
+            {
+                throw invalid_argument("Port number must be non-negative");
+            }
             port_number = vm["-p"].as<vector<int32_t>>()[0];
         }
+        else { throw invalid_argument("Port number must be provided"); }
 
-        if (!vm.count("seat")) 
-        {
-            throw invalid_argument("Seat must be provided");
-        }
-        else 
-        {
-            seat = vm["seat"].as<vector<string>>()[0];
-        }
-
-        if (vm.count("AI")) 
-        {
-            is_AI = true;
-        }
-
-        if (vm.count("IP")) 
-        {
-            IP_v = vm["IP"].as<vector<int16_t>>()[0];
-        }
+        // Count occurrences of -a
+        if (vm.count("-a")) { is_AI = true; }
     }
-    catch(exception& e) 
+    catch(const exception& e) 
     {
         common::print_error(e.what());
         return 1;
