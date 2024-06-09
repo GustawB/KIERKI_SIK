@@ -37,7 +37,7 @@ namespace senders
 
     ssize_t send_total(int32_t socket_fd, const map<string, int32_t>& scores,
         string& message);
-        
+
 } // namespace senders
 
 #endif // SENDERS_H

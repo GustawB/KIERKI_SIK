@@ -858,7 +858,12 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
                 // We received a valid card. Noice.
                 cards[seats_to_array[seat]].erase(received_card);
                 cards_on_table.push_back(message);
-                player_turn = "x";
+
+                /* I had a strange warning on student's server
+                 * regarding giant offsets of the built-in memcpy.
+                 * This is a solution that is not producing a warning.
+                */
+                player_turn = string("x");
                 memory_mutex.unlock();
                 // Notify server that the client played a card.
                 pipe_write = common::write_to_pipe(server_read_pipes

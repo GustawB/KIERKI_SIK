@@ -121,7 +121,7 @@ private:
     * Wrapper for the common::print_log functions,
     * that decides which overload to call.
     */
-    void print_logs(const string& message);
+    void print_logs(const string& message, bool b_is_sender);
 
     struct sockaddr_in server_address;
     struct sockaddr_in6 server6_address;

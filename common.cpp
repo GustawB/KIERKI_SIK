@@ -178,7 +178,7 @@ ssize_t common::get_server_ipv4_addr(char const *host, int32_t port,
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
-        cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        print_error("getaddrinfo failed: " + string(gai_strerror(errcode)));
         if (address_result != nullptr) {
             freeaddrinfo(address_result);
         }
@@ -201,7 +201,7 @@ ssize_t common::get_server_ipv4_addr(char const *host, int32_t port,
     }
 
     freeaddrinfo(address_result);
-    cerr << "Failed to find IPv4 address.\n";
+    print_error("Failed to find IPv4 address.");
     return -1;
 }
 
@@ -218,7 +218,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
-        cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        print_error("getaddrinfo failed: " + string(gai_strerror(errcode)));
         if (address_result != nullptr) { freeaddrinfo(address_result); }
         return -1;
     }
@@ -239,7 +239,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     }
 
     freeaddrinfo(address_result);
-    cerr << "Failed to find IPv6 address.\n";
+    print_error("Failed to find IPv6 address.");
     return -1;
 }
 
@@ -257,7 +257,7 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
     int32_t errcode = getaddrinfo(host, NULL, &hints, &address_result);
     if (errcode != 0)
     {
-        std::cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
+        print_error("getaddrinfo failed: " + string(gai_strerror(errcode)));
         if (address_result != nullptr) { freeaddrinfo(address_result); }
         return -1;
     }
@@ -273,7 +273,8 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
             v4_addr.sin_port = htons(port);
             freeaddrinfo(address_result);
             return 0;
-        } else if (result->ai_family == AF_INET6)
+        }
+        else if (result->ai_family == AF_INET6)
         {
             v6_addr.sin6_family = AF_INET6;
             v6_addr.sin6_addr = ((struct sockaddr_in6 *)
@@ -285,7 +286,7 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
         result = result->ai_next;
     }
 
-    cerr << "Unknown address family.\n";
+    print_error("Failed to find IPv4 or IPv6 address.");
     freeaddrinfo(address_result);
     return -1;
 }
