@@ -124,5 +124,5 @@ pair<string, int32_t> PointsCalculator::bandit(const string& taker)
     points += no_misters(taker).second;
     points += no_hearts_king(taker).second;
     points += no_seventh_last_trick(taker).second;
-    return pair<string, int32_t>{taker, points};
+    return pair<string, int32_t> { taker, points };
 }

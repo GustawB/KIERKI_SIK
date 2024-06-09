@@ -458,7 +458,8 @@ void Klient::handle_client(int32_t socket_fd)
                 }
                 else if (regex::TAKEN_check(message, trick_loc))
                 {
-                    if (!is_ai) { client_printer::print_taken(message, trick_loc); }
+                    if (!is_ai) { client_printer::print_taken
+                        (message, trick_loc); }
                     string cards;
                     char taker = message[message.size() - 3];
                     if (trick_number < 10) 
