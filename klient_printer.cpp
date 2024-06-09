@@ -1,5 +1,23 @@
 #include "klient_printer.h"
 
+/*
+ * Utliity function that will print cards (or anything with a similar format)
+ * in a nice way.
+ */
+void print_data(const vector<string>& cards)
+{
+    bool b_is_first = true;
+    for (const string& card : cards) 
+    {
+        if (b_is_first) 
+        {
+            cout << " " << card;
+            b_is_first = false;
+        }
+        else { cout << ", " << card; }
+    }
+}
+
 void client_printer::print_busy(const std::string& s)
 {
     cout << "Place busy, list of busy places received:";
@@ -12,10 +30,7 @@ void client_printer::print_busy(const std::string& s)
             cout << " " << c;
             b_is_first = false;
         }
-        else
-        {
-            cout << ", " << c;
-        }
+        else { cout << ", " << c; }
     }
     cout << ".\n";
 }
@@ -27,19 +42,7 @@ void client_printer::print_deal(const std::string& s)
     string cards = s.substr(6, s.size() - 8);
     cout << "New deal " << trick_type << ": " << "staring place: "
         << starter_seat << ", your cards:";
-    bool b_is_first = true;
-    for (const string& card : regex::extract_cards(cards)) 
-    { 
-        if (b_is_first) 
-        {
-            cout << " " << card;
-            b_is_first = false;
-        }
-        else
-        {
-            cout << ", " << card;
-        }
-    }
+    print_data(regex::extract_cards(cards));
     cout << ".\n";
 }
 
@@ -55,19 +58,7 @@ void client_printer::print_taken(const std::string& s, int16_t trick_nr)
     else { cards = s.substr(7, s.size() - 10); }
     char taker = s[s.size() - 3];
     cout << "A trick " << trick_nr << " is taken by " << taker << ", cards";
-    bool b_is_first = true;
-    for (const string& card : regex::extract_cards(cards)) 
-    {
-        if (b_is_first) 
-        {
-            cout << " " << card;
-            b_is_first = false;
-        }
-        else
-        {
-            cout << ", " << card;
-        }
-    }
+    print_data(regex::extract_cards(cards));
     cout << ".\n";
 }
 
@@ -99,51 +90,15 @@ void client_printer::print_trick(const std::string& s,
     if (trick_nr < 10) { cards = s.substr(6, s.size() - 8); }
     else { cards = s.substr(7, s.size() - 9); }
     cout << "Trick: (" << trick_nr << ")";
-    bool b_is_first = true;
-    for (const string& card : regex::extract_cards(cards)) 
-    { 
-        if (b_is_first) 
-        {
-            cout << " " << card;
-            b_is_first = false;
-        }
-        else
-        {
-            cout << ", " << card;
-        }
-    }
-    b_is_first = true;
+    print_data(regex::extract_cards(cards));
     cout << "\nAvailable cards:";
-    for (const string& card : my_cards) 
-    {
-        if (b_is_first) 
-        {
-            cout << " " << card;
-            b_is_first = false;
-        }
-        else
-        {
-            cout << ", " << card;
-        }   
-    }
+    print_data(my_cards);
     cout << "\n";
 }
 
 void client_printer::print_my_cards(const vector<string>& my_cards)
 {
-    bool b_is_first = true;
-    for (const string& card : my_cards)
-    {
-        if (b_is_first)
-        {
-            cout << card;
-            b_is_first = false;
-        }
-        else
-        {
-            cout << ", " << card;
-        }
-    }
+    print_data(my_cards);
     cout << ".\n";
 }
 
@@ -152,19 +107,7 @@ void client_printer::print_my_tricks
 {
     for (const vector<string>& trick : taken_tricks)
     {
-        bool b_is_first = true;
-        for (const string& card : trick)
-        {
-            if (b_is_first)
-            {
-                cout << card;
-                b_is_first = false;
-            }
-            else
-            {
-                cout << ", " << card;
-            }
-        }
+        print_data(trick);
         cout << "\n";
     }
 }

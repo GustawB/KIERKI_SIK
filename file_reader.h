@@ -27,8 +27,19 @@ public:
     */
     ssize_t read_next_deal();
 
+    /*
+    * Get the seat of the player starting the last read deal.
+    */
     string get_seat() const;
+
+    /*
+    * Get the trick type of the last read deal.
+    */
     int16_t get_trick_type() const;
+
+    /*
+    * Get the starting hand fo every player in the last read deal.
+    */
     array<string, 4> get_cards() const;
 
 private:

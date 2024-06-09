@@ -49,11 +49,8 @@ void common::print_log(const struct sockaddr_in6& src_addr,
     {
         log_mutex.lock();
         log(src_addr, dest_addr, message);
-        if (message.size() < 2 || 
-            message.substr(message.size() - 2, 2) != "\r\n")
-        {
-            cout << "\n";
-        }
+        if (message.size() < 2 || message.substr(message.size() - 2, 2) != 
+            "\r\n") { cout << "\n"; }
         log_mutex.unlock();
     }
 }
@@ -67,10 +64,7 @@ void common::print_log(const struct sockaddr_in& src_addr,
         log_mutex.lock();
         log(src_addr, dest_addr, message);
         if (message.size() < 2 || 
-            message.substr(message.size() - 2, 2) != "\r\n")
-        {
-            cout << "\n";
-        }
+            message.substr(message.size() - 2, 2) != "\r\n") { cout << "\n"; }
         log_mutex.unlock();
     }
 }
@@ -78,10 +72,7 @@ void common::print_log(const struct sockaddr_in& src_addr,
 void common::print_error(const string& error_message)
 {
     cerr << "\n\tERROR: " << error_message;
-    if (errno != 0)
-    {
-        cerr << " (" << errno << ")\n";
-    }
+    if (errno != 0) { cerr << " (" << errno << ")\n"; }
     else {cerr << "\n";}
 }
 
@@ -228,9 +219,7 @@ ssize_t common::get_server_ipv6_addr(char const *host, int32_t port,
     if (errcode != 0)
     {
         cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-        if (address_result != nullptr) {
-            freeaddrinfo(address_result);
-        }
+        if (address_result != nullptr) { freeaddrinfo(address_result); }
         return -1;
     }
 
@@ -269,9 +258,7 @@ ssize_t common::get_server_unknown_addr(char const *host, int32_t port,
     if (errcode != 0)
     {
         std::cerr << "getaddrinfo: " << gai_strerror(errcode) << "\n";
-        if (address_result != nullptr) {
-            freeaddrinfo(address_result);
-        }
+        if (address_result != nullptr) { freeaddrinfo(address_result); }
         return -1;
     }
 
@@ -319,7 +306,8 @@ int32_t common::setup_server_socket(int32_t port, int32_t queue_size,
     }
 
     optval = 0;
-    // Set the IPV6_V6ONLY option to false.
+    // Set the IPV6_V6ONLY option to false so that the server can accept
+    // both IPv4 and IPv6 connections.
     if (setsockopt(server_fd, IPPROTO_IPV6, IPV6_V6ONLY,
         &optval, sizeof(optval)) == -1)
     {

@@ -16,10 +16,7 @@ ssize_t FileReader::read_next_deal()
     if (!b_was_stream_opened)
     {
         file_stream.open(file);
-        if (!file_stream.is_open())
-        {
-            return -1;
-        }
+        if (!file_stream.is_open()) { return -1; }
         b_was_stream_opened = true;
     }
 
