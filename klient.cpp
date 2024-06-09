@@ -164,6 +164,8 @@ int16_t Klient::prepare_client()
     {
         result = common::get_server_unknown_addr
             (host_name.c_str(), port_number, server_address, server6_address);
+        if (result == 0) { ip_version = 4; }
+        else { ip_version = 6; }
     }
  
     if (result < 0)
@@ -171,9 +173,7 @@ int16_t Klient::prepare_client()
         close_pipe_sockets();
         return -1;
     }
-    else if (result == 0) { ip_version = 4; }
-    else { ip_version = 6; }
- 
+
     // Create a socket.
     int32_t socket_fd = -1;
     if (ip_version == 4) { socket_fd = common::create_socket(); }

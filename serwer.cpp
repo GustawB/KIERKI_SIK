@@ -47,7 +47,11 @@ void Serwer::close_thread(const string& error_message,
         * everything but one last connection manages to grab free seat.
         * Now it will be like "Damn, seat is already taken, I'm outta here."
         */
-        if (!b_was_ended_by_server) {seats_status[seat] = -1;}
+        if (!b_was_ended_by_server) 
+        {
+            b_is_barrier_ongoing = true;
+            seats_status[seat] = -1;
+        }
         memory_mutex.unlock();
     }
     if ((!b_was_ended_by_server) && (b_was_occupying ||
@@ -291,7 +295,7 @@ int16_t Serwer::barrier()
         }
         memory_mutex.lock();
         waiting = 4 - occupied;
-        if (waiting == 0) {b_is_barrier_ongoing = false;}
+        if (waiting == 0) { b_is_barrier_ongoing = false; }
         memory_mutex.unlock();
     }
 
@@ -436,17 +440,8 @@ int16_t Serwer::run_deal(int16_t trick_type, const string& seat)
                                 // Thread run away.
                                 if (j == 4) 
                                 {
-                                    // Connection thread. Recreate the thread.
-                                    connection_manager_thread.join();
-                                    try
-                                    {
-                                        connection_manager_thread = thread
-                                        (&Serwer::handle_connections, this);
-                                    }
-                                    catch (const system_error& e)
-                                    {
-                                        close_server(e.what());
-                                    }
+                                    // Connection thread failed. Close server.
+                                    close_server("Connection thread failed.");
                                 }
                                 else
                                 {
@@ -823,26 +818,6 @@ int16_t Serwer::parse_message(string& message, int32_t client_fd,
             if (received_card == cards[seats_to_array[seat]].end() ||
                 !b_played_right_color)
             {
-                if (received_card == cards[seats_to_array[seat]].end())
-                {
-                    common::print_error("Client send a card he didn't have.",
-                        print_mutex);
-                }
-                else
-                {
-                    if (extracted_trick != current_trick)
-                    {
-                        common::print_error
-                            ("Client send a card with a wrong trick.",
-                            print_mutex);
-                    }
-                    else
-                    {
-                        common::print_error
-                            ("Client send a card with a wrong color.",
-                            print_mutex);
-                    }
-                }
                 memory_mutex.unlock();
                 // Client send something he didn't have; send back wrong.
                 string msg;
@@ -921,6 +896,7 @@ int16_t Serwer::client_poll(int32_t client_fd, const string& seat,
 
         memory_mutex.lock();
         int16_t current_trick = trick_number;
+        if ( b_is_barrier_ongoing) { b_is_barrier = true; }
         memory_mutex.unlock();
         if (!b_is_barrier)
         {
